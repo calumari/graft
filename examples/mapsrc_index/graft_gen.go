@@ -31,11 +31,11 @@ func (m *composerImpl) ComposeIdx(p0 A, p1 B) OutIdx {
 	return dst
 }
 
-// ComposeIdxContext maps p1 to the destination type.
-func (m *composerImpl) ComposeIdxContext(p0 context.Context, p1 A, p2 B) OutIdx {
+// ComposeIdxContext maps p0 to the destination type.
+func (m *composerImpl) ComposeIdxContext(ctx context.Context, p0 A, p1 B) OutIdx {
 	var dst OutIdx
-	dst.FromA = p1.ValueA
-	dst.FromB = p2.ValueB
-	dst.Common = p1.Common
+	dst.FromA = p0.ValueA
+	dst.FromB = p1.ValueB
+	dst.Common = p0.Common
 	return dst
 }

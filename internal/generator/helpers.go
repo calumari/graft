@@ -9,7 +9,7 @@ import (
 // buildAssignmentNodes produces nodes mapping srcExpr (srcType) to destExpr
 // (destType). Order of checks matters: identical -> assignable (cast) ->
 // existing custom/mapper -> collections/pointers -> helper -> unsupported.
-func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, srcType types.Type, currentMethod string) []codeNode {
+func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, srcType types.Type, currentMethod string, useCtx bool) []codeNode {
 	if types.Identical(destType, srcType) {
 		return []codeNode{{Kind: nodeKindAssignDirect, Dest: destExpr, Src: srcExpr}}
 	}
@@ -21,9 +21,9 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 		if mi, ok := g.registry[key]; ok && mi.Name != currentMethod {
 			if mi.Kind == regKindCustomFunc || currentMethod != "" {
 				if mi.Kind == regKindCustomFunc {
-					return []codeNode{{Kind: nodeKindAssignFunc, Dest: destExpr, Method: mi.Name, Arg: srcExpr, WithError: mi.HasError, UseContext: g.currentCtxName != "", CtxName: g.currentCtxName}}
+					return []codeNode{{Kind: nodeKindAssignFunc, Dest: destExpr, Method: mi.Name, Arg: srcExpr, WithError: mi.HasError, UseContext: useCtx}}
 				}
-				return []codeNode{{Kind: nodeKindAssignMethod, Dest: destExpr, Method: mi.Name, Arg: srcExpr, WithError: mi.HasError, UseContext: g.currentCtxName != "", CtxName: g.currentCtxName}}
+				return []codeNode{{Kind: nodeKindAssignMethod, Dest: destExpr, Method: mi.Name, Arg: srcExpr, WithError: mi.HasError, UseContext: useCtx}}
 			}
 		}
 	}
@@ -31,7 +31,7 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 	case *types.Slice:
 		if st, ok := srcType.(*types.Slice); ok {
 			delem, selem := dt.Elem(), st.Elem()
-			child := g.buildAssignmentNodes("mapped", "v", delem, selem, currentMethod)
+			child := g.buildAssignmentNodes("mapped", "v", delem, selem, currentMethod, useCtx)
 			loopErr := false
 			for _, c := range child {
 				if c.WithError {
@@ -44,14 +44,14 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 	case *types.Array:
 		if st, ok := srcType.(*types.Array); ok && dt.Len() == st.Len() {
 			delem, selem := dt.Elem(), st.Elem()
-			child := g.buildAssignmentNodes(fmt.Sprintf("%s[i]", destExpr), fmt.Sprintf("%s[i]", srcExpr), delem, selem, currentMethod)
+			child := g.buildAssignmentNodes(fmt.Sprintf("%s[i]", destExpr), fmt.Sprintf("%s[i]", srcExpr), delem, selem, currentMethod, useCtx)
 			return []codeNode{{Kind: nodeKindArrayMap, Src: srcExpr, Dest: destExpr, Children: child}}
 		}
 	case *types.Map:
 		if st, ok := srcType.(*types.Map); ok {
 			if types.Identical(dt.Key(), st.Key()) {
 				dval, sval := dt.Elem(), st.Elem()
-				child := g.buildAssignmentNodes("mapped", "v", dval, sval, currentMethod)
+				child := g.buildAssignmentNodes("mapped", "v", dval, sval, currentMethod, useCtx)
 				loopErr := false
 				for _, c := range child {
 					if c.WithError {
@@ -72,17 +72,17 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 						if mi.Kind == regKindCustomFunc {
 							kind = nodeKindPtrFuncMap
 						}
-						return []codeNode{{Kind: kind, Src: srcExpr, Dest: destExpr, Method: mi.Name, WithError: mi.HasError, UseContext: g.currentCtxName != "", CtxName: g.currentCtxName}}
+						return []codeNode{{Kind: kind, Src: srcExpr, Dest: destExpr, Method: mi.Name, WithError: mi.HasError, UseContext: useCtx}}
 					}
 				}
 				helper := g.ensureStructHelper(srcType, destType)
-				return []codeNode{{Kind: nodeKindPtrStructMap, Src: srcExpr, Dest: destExpr, Helper: helper, UseContext: g.currentCtxName != ""}}
+				return []codeNode{{Kind: nodeKindPtrStructMap, Src: srcExpr, Dest: destExpr, Helper: helper, UseContext: useCtx}}
 			}
 		}
 	}
 	if isStructLike(destType) && isStructLike(srcType) {
 		helper := g.ensureStructHelper(srcType, destType)
-		return []codeNode{{Kind: nodeKindAssignHelper, Dest: destExpr, Src: srcExpr, Helper: helper, UseContext: g.currentCtxName != ""}}
+		return []codeNode{{Kind: nodeKindAssignHelper, Dest: destExpr, Src: srcExpr, Helper: helper, UseContext: useCtx}}
 	}
 	return []codeNode{{Kind: nodeKindUnsupported, SrcType: srcType.String(), DestType: destType.String()}}
 }
@@ -138,7 +138,7 @@ func (g *generator) ensureCompositeHelper(srcType, destType types.Type) string {
 }
 
 // populateHelpers performs the second pass: filling helper bodies for any shell helpers.
-func (g *generator) populateHelpers() {
+func (g *generator) populateHelpers(scope *types.Scope) {
 	for i := 0; i < len(g.helperPlans); i++ { // dynamic length loop to handle newly appended plans
 		plan := &g.helperPlans[i]
 		if plan.Populated {
@@ -146,7 +146,7 @@ func (g *generator) populateHelpers() {
 		}
 		// Build helperModel from plan
 		if plan.Composite {
-			body := g.buildAssignmentNodes("dst", "in", plan.DestGoType, plan.SrcGoType, "")
+			body := g.buildAssignmentNodes("dst", "in", plan.DestGoType, plan.SrcGoType, "", false)
 			hm := helperModel{Name: plan.Name, SrcType: types.TypeString(plan.SrcGoType, g.qualifier), DestType: types.TypeString(plan.DestGoType, g.qualifier), Body: body}
 			g.helperModels = append(g.helperModels, hm)
 			plan.Populated = true
@@ -229,7 +229,7 @@ func (g *generator) populateHelpers() {
 					currType = f.Type()
 				}
 				if okPath {
-					body = append(body, g.buildAssignmentNodes(destVar+"."+fname, expr, df.Type(), currType, "")...)
+					body = append(body, g.buildAssignmentNodes(destVar+"."+fname, expr, df.Type(), currType, "", false)...)
 					continue
 				}
 			}
@@ -238,8 +238,8 @@ func (g *generator) populateHelpers() {
 				continue
 			}
 			if explicitFunc != "" {
-				if g.pkgScope != nil {
-					if obj := g.pkgScope.Lookup(explicitFunc); obj != nil {
+				if scope != nil {
+					if obj := scope.Lookup(explicitFunc); obj != nil {
 						if fn, ok := obj.(*types.Func); ok {
 							if sig, ok := fn.Type().(*types.Signature); ok && sig.Params().Len() == 1 && sig.Results().Len() >= 1 {
 								if sig.Results().Len() == 1 || (sig.Results().Len() == 2 && isErrorType(sig.Results().At(1).Type())) {
@@ -266,7 +266,7 @@ func (g *generator) populateHelpers() {
 				continue
 			}
 			if sf != nil && explicitFunc == "" {
-				body = append(body, g.buildAssignmentNodes(destVar+"."+fname, srcPrefix+sf.Name(), df.Type(), sf.Type(), "")...)
+				body = append(body, g.buildAssignmentNodes(destVar+"."+fname, srcPrefix+sf.Name(), df.Type(), sf.Type(), "", false)...)
 			}
 		}
 		hasErr := false

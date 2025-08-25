@@ -8,12 +8,12 @@ import (
 
 // buildMethodModelFromPlan constructs the methodModel body using an existing methodPlan.
 func (g *generator) buildMethodModelFromPlan(mp methodPlan) (*methodModel, error) {
-	g.currentCtxName = ""
+	useCtx := false
 	sig := mp.Signature
 	params := mp.Params
 	ctxIndex := mp.CtxIndex
 	if ctxIndex >= 0 && ctxIndex < len(params) {
-		g.currentCtxName = params[ctxIndex].Name
+		useCtx = true
 	}
 	hasError := mp.HasError
 	primaryIdx := mp.PrimaryIndex
@@ -128,7 +128,7 @@ func (g *generator) buildMethodModelFromPlan(mp methodPlan) (*methodModel, error
 								currType = f.Type()
 							}
 							if okPath {
-								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, expr, df.Type(), currType, mp.Name)
+								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, expr, df.Type(), currType, mp.Name, useCtx)
 								nodes = append(nodes, assign...)
 								continue
 							}
@@ -170,7 +170,7 @@ func (g *generator) buildMethodModelFromPlan(mp methodPlan) (*methodModel, error
 						for jj := 0; jj < ss.NumFields(); jj++ {
 							f2 := ss.Field(jj)
 							if f2.Exported() && f2.Name() == fname {
-								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(p.Name, paramPtrs[p.Name])+f2.Name(), df.Type(), f2.Type(), mp.Name)
+								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(p.Name, paramPtrs[p.Name])+f2.Name(), df.Type(), f2.Type(), mp.Name, useCtx)
 								nodes = append(nodes, assign...)
 								resolved = true
 								break
@@ -198,7 +198,7 @@ func (g *generator) buildMethodModelFromPlan(mp methodPlan) (*methodModel, error
 					}
 					continue
 				}
-				assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(srcParamName, paramPtrs[srcParamName])+sf.Name(), df.Type(), sf.Type(), mp.Name)
+				assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(srcParamName, paramPtrs[srcParamName])+sf.Name(), df.Type(), sf.Type(), mp.Name, useCtx)
 				nodes = append(nodes, assign...)
 			}
 			if destPtr {

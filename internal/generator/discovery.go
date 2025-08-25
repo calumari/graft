@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
+	"strconv"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -59,18 +60,25 @@ func (g *generator) buildInterfaceModel(name string, iface *types.Interface) (*i
 		var params []paramModel
 		ctxIdx := -1
 		primaryIdx := -1
+		nonCtxCount := 0
 		for pi := 0; pi < sig.Params().Len(); pi++ {
 			p := sig.Params().At(pi)
 			pname := p.Name()
-			if pname == "" {
-				pname = fmt.Sprintf("p%d", pi)
-			}
 			if nt, ok := p.Type().(*types.Named); ok {
 				if obj := nt.Obj(); obj != nil && obj.Name() == "Context" {
 					if pkg := obj.Pkg(); pkg != nil && pkg.Path() == "context" {
 						ctxIdx = pi
+						if pname == "" { // only supply default if unnamed
+							pname = "ctx"
+						}
 					}
 				}
+			}
+			if pi != ctxIdx { // non-context param
+				if pname == "" {
+					pname = "p" + strconv.Itoa(nonCtxCount)
+				}
+				nonCtxCount++
 			}
 			params = append(params, paramModel{Name: pname, Type: types.TypeString(p.Type(), g.qualifier)})
 			if pi == ctxIdx {

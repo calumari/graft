@@ -11,23 +11,19 @@ import (
 type generator struct {
 	currentPkgName string
 	// registry maps src->dest (and src->dest#err) to metadata for interface methods or custom funcs.
-	registry       map[string]registryEntry
-	helperSet      map[string]bool
-	helperModels   []helperModel
-	helperErrors   map[string]bool // helper name -> returns error
-	helperPlans    []helperPlan    // planning data for two-pass population
-	pkgScope       *types.Scope
-	currentCtxName string // set while building a method if ctx parameter present
+	registry     map[string]registryEntry
+	helperSet    map[string]bool
+	helperModels []helperModel
+	helperPlans  []helperPlan // planning data for two-pass population
 }
 
 func Run(cfg Config) error { return newGenerator().run(cfg) }
 
 func newGenerator() *generator {
 	return &generator{
-		registry:     make(map[string]registryEntry),
-		helperSet:    make(map[string]bool),
-		helperErrors: make(map[string]bool),
-		helperPlans:  nil,
+		registry:    make(map[string]registryEntry),
+		helperSet:   make(map[string]bool),
+		helperPlans: nil,
 	}
 }
 

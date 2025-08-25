@@ -14,4 +14,5 @@ type Out struct {
 
 type CtxMapper interface {
 	Map(context.Context, In) Out
+	MapNamedCtx(c context.Context, in In) Out // if context is given a different name, use that
 }

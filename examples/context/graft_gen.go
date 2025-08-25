@@ -13,9 +13,16 @@ type ctxMapperImpl struct{}
 // NewCtxMapper returns a new CtxMapper implementation.
 func NewCtxMapper() CtxMapper { return &ctxMapperImpl{} }
 
-// Map maps p1 to the destination type.
-func (m *ctxMapperImpl) Map(p0 context.Context, p1 In) Out {
+// Map maps p0 to the destination type.
+func (m *ctxMapperImpl) Map(ctx context.Context, p0 In) Out {
 	var dst Out
-	dst.V = p1.V
+	dst.V = p0.V
+	return dst
+}
+
+// MapNamedCtx maps in to the destination type.
+func (m *ctxMapperImpl) MapNamedCtx(c context.Context, in In) Out {
+	var dst Out
+	dst.V = in.V
 	return dst
 }

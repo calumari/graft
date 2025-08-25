@@ -9,14 +9,14 @@ if err != nil { return {{if eq $.Dest "mapped"}}dst{{else}}{{$.Dest}}{{end}}, er
 {{else}}{{$.Dest}} = {{$.Helper}}({{if $.UseContext}}ctx, {{end}}{{$.Src}})
 {{end}}{{end}}
 
-{{define "node_assignMethod"}}{{if $.WithError }}tmp, err := m.{{$.Method}}({{if $.UseContext}}{{$.CtxName}}, {{end}}{{$.Arg}})
+{{define "node_assignMethod"}}{{if $.WithError }}tmp, err := m.{{$.Method}}({{if $.UseContext}}ctx, {{end}}{{$.Arg}})
 if err != nil { return {{if eq $.Dest "mapped"}}dst{{else}}{{$.Dest}}{{end}}, err }
 {{$.Dest}} = tmp
-{{else}}{{$.Dest}} = m.{{$.Method}}({{if $.UseContext}}{{$.CtxName}}, {{end}}{{$.Arg}})
+{{else}}{{$.Dest}} = m.{{$.Method}}({{if $.UseContext}}ctx, {{end}}{{$.Arg}})
 {{end}}{{end}}
 
-{{define "node_assignFunc"}}{{if $.WithError}}tmp, err := {{$.Method}}({{if $.UseContext}}{{$.CtxName}}, {{end}}{{$.Arg}})
+{{define "node_assignFunc"}}{{if $.WithError}}tmp, err := {{$.Method}}({{if $.UseContext}}ctx, {{end}}{{$.Arg}})
 if err != nil { return {{if eq $.Dest "mapped"}}dst{{else}}{{$.Dest}}{{end}}, err }
 {{$.Dest}} = tmp
-{{else}}{{$.Dest}} = {{$.Method}}({{if $.UseContext}}{{$.CtxName}}, {{end}}{{$.Arg}})
+{{else}}{{$.Dest}} = {{$.Method}}({{if $.UseContext}}ctx, {{end}}{{$.Arg}})
 {{end}}{{end}}

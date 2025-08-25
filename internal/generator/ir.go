@@ -108,7 +108,6 @@ type codeNode struct {
 	Children      []codeNode
 	LoopWithError bool
 	UseContext    bool
-	CtxName       string
 	// debug fields
 	Debug bool
 	Path  string

@@ -3,7 +3,7 @@ package generator
 import "strings"
 
 // computeHelperErrors performs a fixed-point analysis over helper bodies to mark which helpers ultimately return an error.
-func (g *generator) computeHelperErrors() {
+func (g *generator) computeHelperErrors() map[string]bool {
 	changed := true
 	index := map[string]*helperModel{}
 	for i := range g.helperModels {
@@ -47,16 +47,17 @@ func (g *generator) computeHelperErrors() {
 			}
 		}
 	}
+	res := map[string]bool{}
 	for _, h := range g.helperModels {
 		if h.HasError {
-			g.helperErrors[h.Name] = true
+			res[h.Name] = true
 		}
 	}
+	return res
 }
 
 // annotateHelperErrorUsage propagates helper error knowledge into node.WithError flags where needed.
-func (g *generator) annotateHelperErrorUsage(interfaces *[]interfaceModel) {
-	helperErr := g.helperErrors
+func (g *generator) annotateHelperErrorUsage(interfaces *[]interfaceModel, helperErr map[string]bool) {
 	for hi := range g.helperModels {
 		h := &g.helperModels[hi]
 		for ni := range h.Body {
