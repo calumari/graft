@@ -1,12 +1,8 @@
-.PHONY: generate-examples
-generate-examples:
-	for d in */; do \
-		echo "Generating in $$d"; \
-		(cd "$$d" && rm -f graft_gen.go && go generate ./...); \
-	done
+.PHONY: generate test
 
-test-examples: generate-examples
-	for d in */; do \
-		echo "Testing in $$d"; \
-		(cd "$$d" && go test ./...); \
-	done
+generate:
+	@find . -type f -name graft_gen.go -delete
+	@go generate ./...
+
+test: generate
+	@go test ./...
