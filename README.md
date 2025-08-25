@@ -5,7 +5,7 @@ Tiny code generator for **type-safe struct mappers** in Go (inspired by [MapStru
 ## Install
 
 ```bash
-go install ../../cmd/graftgen@latest
+go install github.com/calumari/graft@latest
 ```
 
 Or use a `//go:generate` directive (recommended).
@@ -16,7 +16,7 @@ Or use a `//go:generate` directive (recommended).
 // model.go
 package demo
 
-//go:generate go run ../../cmd/graftgen -interface=UserMapper -output=mapper_gen.go
+//go:generate go run github.com/calumari/graft/cmd/graftgen -interface=UserMapper -output=mapper_gen.go
 
 type User struct { ID int; Name string }
 type UserDTO struct { ID int; Name string }
