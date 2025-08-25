@@ -16,7 +16,7 @@ Or use a `//go:generate` directive (recommended).
 // model.go
 package demo
 
-//go:generate go run github.com/calumari/graft/cmd/graftgen -interface=UserMapper -output=mapper_gen.go
+//go:generate github.com/calumari/graft/cmd/graftgen -interface=UserMapper -output=mapper_gen.go
 
 type User struct { ID int; Name string }
 type UserDTO struct { ID int; Name string }
