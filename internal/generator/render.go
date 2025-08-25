@@ -53,15 +53,12 @@ func (g *generator) run(cfg Config) error {
 	g.helperSet = make(map[string]bool)
 	g.helperModels = nil
 	funcMap := g.discoverCustomFuncs(pkg, cfg.CustomFuncs)
-	if g.customFuncs == nil {
-		g.customFuncs = make(map[string]methodInfo)
-	}
 	for k, mi := range funcMap {
-		g.customFuncs[k] = mi
+		g.registry[k] = mi
 		if !mi.HasError {
 			base := strings.TrimSuffix(k, "#err")
-			if _, ok := g.methodMap[base]; !ok {
-				g.methodMap[base] = mi
+			if _, ok := g.registry[base]; !ok {
+				g.registry[base] = registryEntry{Name: mi.Name, HasError: false, Kind: regKindCustomFunc}
 			}
 		}
 	}

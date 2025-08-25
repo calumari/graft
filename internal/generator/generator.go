@@ -10,20 +10,20 @@ import (
 // generator holds transient state while building models.
 type generator struct {
 	currentPkgName string
-	methodMap      map[string]methodInfo // key: src->dest
+	// registry maps src->dest (and src->dest#err) to metadata for interface methods or custom funcs.
+	registry       map[string]registryEntry
 	helperSet      map[string]bool
 	helperModels   []helperModel
 	helperErrors   map[string]bool // helper name -> returns error
 	pkgScope       *types.Scope
-	currentCtxName string                // set while building a method if ctx parameter present
-	customFuncs    map[string]methodInfo // key: src->dest or src->dest#err for error variant
+	currentCtxName string // set while building a method if ctx parameter present
 }
 
 func Run(cfg Config) error { return newGenerator().run(cfg) }
 
 func newGenerator() *generator {
 	return &generator{
-		methodMap:    make(map[string]methodInfo),
+		registry:     make(map[string]registryEntry),
 		helperSet:    make(map[string]bool),
 		helperErrors: make(map[string]bool),
 	}
@@ -155,4 +155,15 @@ func customFuncKey(src, dest string, hasErr bool) string {
 		return src + "->" + dest + "#err"
 	}
 	return src + "->" + dest
+}
+
+// findCustomVariant returns a custom func variant (non-error or error) if present for the base key.
+func (g *generator) findCustomVariant(base string) *registryEntry {
+	if e, ok := g.registry[base]; ok && e.Kind == regKindCustomFunc {
+		return &e
+	}
+	if e, ok := g.registry[base+"#err"]; ok && e.Kind == regKindCustomFunc {
+		return &e
+	}
+	return nil
 }

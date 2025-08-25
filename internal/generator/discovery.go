@@ -41,11 +41,9 @@ func (g *generator) buildInterfaceModel(name string, iface *types.Interface) (*i
 			srcT := types.TypeString(sig.Params().At(primaryIdx).Type(), g.qualifier)
 			destT := types.TypeString(sig.Results().At(0).Type(), g.qualifier)
 			key := srcT + "->" + destT
-			// skip adding interface method mapping if ANY custom variant exists
-			_, nonErr := g.customFuncs[key]
-			_, errVar := g.customFuncs[key+"#err"]
-			if !nonErr && !errVar {
-				g.methodMap[key] = methodInfo{Name: m.Name(), HasError: sig.Results().Len() == 2, IsFunc: false}
+			// skip adding interface method if a custom func variant exists
+			if _, ok := g.registry[key]; !ok && g.findCustomVariant(key) == nil {
+				g.registry[key] = registryEntry{Name: m.Name(), HasError: sig.Results().Len() == 2, Kind: regKindInterfaceMethod}
 			}
 		}
 		mm, err := g.buildMethodModel(implName, m)
@@ -58,14 +56,14 @@ func (g *generator) buildInterfaceModel(name string, iface *types.Interface) (*i
 }
 
 // discoverCustomFuncs finds eligible custom mapping functions.
-func (g *generator) discoverCustomFuncs(pkg *packages.Package, allowlist []string) map[string]methodInfo {
+func (g *generator) discoverCustomFuncs(pkg *packages.Package, allowlist []string) map[string]registryEntry {
 	allowed := map[string]bool{}
 	if len(allowlist) > 0 {
 		for _, n := range allowlist {
 			allowed[n] = true
 		}
 	}
-	res := map[string]methodInfo{}
+	res := map[string]registryEntry{}
 	scope := pkg.Types.Scope()
 	for _, name := range scope.Names() {
 		if !token.IsExported(name) {
@@ -89,10 +87,10 @@ func (g *generator) discoverCustomFuncs(pkg *packages.Package, allowlist []strin
 		srcT := types.TypeString(sig.Params().At(0).Type(), g.qualifier)
 		destT := types.TypeString(sig.Results().At(0).Type(), g.qualifier)
 		key := customFuncKey(srcT, destT, sig.Results().Len() == 2)
-		if _, exists := g.methodMap[srcT+"->"+destT]; exists {
+		if _, exists := g.registry[srcT+"->"+destT]; exists {
 			continue
 		}
-		res[key] = methodInfo{Name: name, HasError: sig.Results().Len() == 2, IsFunc: true}
+		res[key] = registryEntry{Name: name, HasError: sig.Results().Len() == 2, Kind: regKindCustomFunc}
 	}
 	return res
 }
@@ -103,15 +101,12 @@ func (g *generator) discoverAndBuild(cfg Config, pkg *packages.Package, ifaceMap
 	sort.Strings(cfg.Interfaces)
 	// discover custom funcs
 	funcMap := g.discoverCustomFuncs(pkg, cfg.CustomFuncs)
-	if g.customFuncs == nil {
-		g.customFuncs = make(map[string]methodInfo)
-	}
 	for k, mi := range funcMap {
-		g.customFuncs[k] = mi
-		if !mi.HasError { // register non-error variant for nested use
+		g.registry[k] = mi
+		if !mi.HasError { // ensure base variant accessible without #err suffix
 			base := strings.TrimSuffix(k, "#err")
-			if _, ok := g.methodMap[base]; !ok {
-				g.methodMap[base] = mi
+			if _, ok := g.registry[base]; !ok {
+				g.registry[base] = registryEntry{Name: mi.Name, HasError: false, Kind: regKindCustomFunc}
 			}
 		}
 	}

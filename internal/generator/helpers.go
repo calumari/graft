@@ -18,9 +18,9 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 	}
 	// custom / existing mapper
 	if key := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier); true {
-		if mi, ok := g.methodMap[key]; ok && mi.Name != currentMethod {
-			if mi.IsFunc || currentMethod != "" {
-				if mi.IsFunc {
+		if mi, ok := g.registry[key]; ok && mi.Name != currentMethod {
+			if mi.Kind == regKindCustomFunc || currentMethod != "" {
+				if mi.Kind == regKindCustomFunc {
 					return []codeNode{{Kind: nodeKindAssignFunc, Dest: destExpr, Method: mi.Name, Arg: srcExpr, WithError: mi.HasError, UseContext: g.currentCtxName != "", CtxName: g.currentCtxName}}
 				}
 				return []codeNode{{Kind: nodeKindAssignMethod, Dest: destExpr, Method: mi.Name, Arg: srcExpr, WithError: mi.HasError, UseContext: g.currentCtxName != "", CtxName: g.currentCtxName}}
@@ -66,10 +66,10 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 		if st, ok := srcType.(*types.Pointer); ok {
 			if isStructLike(dt.Elem()) && isStructLike(st.Elem()) {
 				key := types.TypeString(st.Elem(), g.qualifier) + "->" + types.TypeString(dt.Elem(), g.qualifier)
-				if mi, ok := g.methodMap[key]; ok && mi.Name != currentMethod {
-					if mi.IsFunc || currentMethod != "" {
+				if mi, ok := g.registry[key]; ok && mi.Name != currentMethod {
+					if mi.Kind == regKindCustomFunc || currentMethod != "" {
 						kind := nodeKindPtrMethodMap
-						if mi.IsFunc {
+						if mi.Kind == regKindCustomFunc {
 							kind = nodeKindPtrFuncMap
 						}
 						return []codeNode{{Kind: kind, Src: srcExpr, Dest: destExpr, Method: mi.Name, WithError: mi.HasError, UseContext: g.currentCtxName != "", CtxName: g.currentCtxName}}
@@ -108,12 +108,12 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 	}
 	if sStruct != nil && dStruct != nil {
 		baseKey := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
-		if mi, ok := g.customFuncs[baseKey+"#err"]; ok && mi.IsFunc && mi.HasError {
+		if mi, ok := g.registry[baseKey+"#err"]; ok && mi.Kind == regKindCustomFunc && mi.HasError {
 			body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: "dst", Method: mi.Name, Arg: "in", WithError: true})
 			g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet, HasError: true})
 			return name
 		}
-		if mi, ok := g.customFuncs[baseKey]; ok && mi.IsFunc {
+		if mi, ok := g.registry[baseKey]; ok && mi.Kind == regKindCustomFunc {
 			body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: "dst", Method: mi.Name, Arg: "in", WithError: false})
 			g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet})
 			return name

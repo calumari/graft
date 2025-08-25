@@ -119,3 +119,19 @@ type methodInfo struct {
 	HasError bool
 	IsFunc   bool
 }
+
+// registryEntry consolidates previous methodMap/customFuncs into a single
+// structure with an explicit kind for later specialization.
+type registryEntry struct {
+	Name     string
+	HasError bool
+	Kind     registryKind
+	// For functions we may need to know quickly if it was originally custom.
+}
+
+type registryKind int
+
+const (
+	regKindInterfaceMethod registryKind = iota
+	regKindCustomFunc
+)
