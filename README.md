@@ -1,4 +1,4 @@
-# Graft
+# graft
 
 Tiny code generator for **type-safe struct mappers** in Go (inspired by [MapStruct](https://mapstruct.org/)). You write small interfaces; Graft emits plain Go (no reflection) that does the mapping.
 
