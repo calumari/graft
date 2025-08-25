@@ -11,9 +11,11 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 	if types.Identical(destType, srcType) {
 		return []codeNode{{Kind: nodeKindAssignDirect, Dest: destExpr, Src: srcExpr}}
 	}
+
 	if types.AssignableTo(srcType, destType) {
 		return []codeNode{{Kind: nodeKindAssignCast, Dest: destExpr, Src: srcExpr, CastType: types.TypeString(destType, g.qualifier)}}
 	}
+
 	if key := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier); true {
 		if mi, ok := g.registry[key]; ok && mi.Name != currentMethod {
 			if mi.Kind == regKindCustomFunc || currentMethod != "" {
@@ -24,6 +26,7 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 			}
 		}
 	}
+
 	switch dt := destType.(type) {
 	case *types.Slice:
 		if st, ok := srcType.(*types.Slice); ok {

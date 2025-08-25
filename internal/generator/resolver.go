@@ -21,16 +21,21 @@ type fieldResolver struct{ g *generator }
 func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) []AssignmentPlan {
 	sStruct, _ := underlyingStruct(plan.SrcGoType)
 	dStruct, _ := underlyingStruct(plan.DestGoType)
+
 	if sStruct == nil || dStruct == nil {
 		return nil
 	}
+
 	var plans []AssignmentPlan
+
 	for fi := 0; fi < dStruct.NumFields(); fi++ {
 		df := dStruct.Field(fi)
 		if !df.Exported() {
 			continue
 		}
+
 		fname := df.Name()
+
 		explicitFunc := ""
 		explicitSrcPath := ""
 		if pt := parseTagCached(dStruct, fi); pt != nil {
@@ -41,6 +46,7 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 				explicitSrcPath = p
 			}
 		}
+
 		sf := findMatchingSourceField(sStruct, fname)
 		if sf == nil {
 			sf = findTaggedSourceField(sStruct, fname)
@@ -59,6 +65,7 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 				}
 			}
 		}
+
 		if explicitSrcPath != "" && explicitFunc == "" {
 			parts := strings.Split(explicitSrcPath, ".")
 			currType := plan.SrcGoType
@@ -91,10 +98,12 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 				continue
 			}
 		}
+
 		if sf == nil && explicitFunc == "" {
 			plans = append(plans, AssignmentPlan{DestField: fname, Nodes: []codeNode{{Kind: nodeKindComment, Comment: "no source field for " + fname}}})
 			continue
 		}
+
 		if explicitFunc != "" { // resolve mapfn now (scope available in populateHelpers)
 			resolved := false
 			if scope != nil {
@@ -123,16 +132,19 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 					}
 				}
 			}
+
 			if !resolved {
 				plans = append(plans, AssignmentPlan{DestField: fname, Nodes: []codeNode{{Kind: nodeKindComment, Comment: "mapfn not found or invalid: " + explicitFunc}}})
 			}
 			continue
 		}
+
 		if sf != nil {
 			nodes := r.g.buildAssignmentNodes("dst."+fname, "in."+sf.Name(), df.Type(), sf.Type(), "", false)
 			plans = append(plans, AssignmentPlan{DestField: fname, Nodes: nodes})
 		}
 	}
+
 	return plans
 }
 

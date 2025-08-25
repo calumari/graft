@@ -9,6 +9,7 @@ func (g *generator) computeHelperErrors() map[string]bool {
 	for i := range g.helperModels {
 		index[g.helperModels[i].Name] = &g.helperModels[i]
 	}
+
 	var matchesErrNode func(codeNode) bool
 	matchesErrNode = func(n codeNode) bool {
 		if n.Kind == nodeKindAssignMethod || n.Kind == nodeKindPtrMethodMap {
@@ -37,6 +38,7 @@ func (g *generator) computeHelperErrors() map[string]bool {
 		}
 		return false
 	}
+
 	for changed {
 		changed = false
 		for i := range g.helperModels {
