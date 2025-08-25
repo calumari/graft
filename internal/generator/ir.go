@@ -112,14 +112,6 @@ type codeNode struct {
 	Path  string
 }
 
-// methodInfo records either a discovered custom function or an interface method
-// signature for reuse during mapping decisions.
-type methodInfo struct {
-	Name     string
-	HasError bool
-	IsFunc   bool
-}
-
 // registryEntry consolidates previous methodMap/customFuncs into a single
 // structure with an explicit kind for later specialization.
 type registryEntry struct {
