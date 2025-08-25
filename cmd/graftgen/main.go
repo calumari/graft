@@ -64,9 +64,15 @@ func main() {
 	for i := range interfaces {
 		interfaces[i] = strings.TrimSpace(interfaces[i])
 	}
-	customFuncs := strings.Split(customFuncsCSV, ",")
-	for i := range customFuncs {
-		customFuncs[i] = strings.TrimSpace(customFuncs[i])
+	var customFuncs []string
+	if customFuncsCSV != "" {
+		parts := strings.SplitSeq(customFuncsCSV, ",")
+		for p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				customFuncs = append(customFuncs, p)
+			}
+		}
 	}
 
 	// build a simplified canonical command representation instead of raw argv (which may include build cache paths)

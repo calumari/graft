@@ -402,12 +402,17 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 			baseKey := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
 			var mi methodInfo
 			var okFn bool
+			// prefer error variant when method has error; fall back to non-error if only that exists
 			if hasError {
-				mi, okFn = g.customFuncs[baseKey+"#err"]
+				if errVariant, okErr := g.customFuncs[baseKey+"#err"]; okErr {
+					mi, okFn = errVariant, true
+				} else if nonErrVariant, okNon := g.customFuncs[baseKey]; okNon {
+					mi, okFn = nonErrVariant, true
+				}
 			} else {
 				mi, okFn = g.customFuncs[baseKey]
 			}
-			if okFn && mi.IsFunc { // direct custom function
+			if okFn && mi.IsFunc { // direct custom function (error variant chosen when available above)
 				if srcPtr {
 					zero := g.zeroValue(destType)
 					nodes = append(nodes, codeNode{Kind: nodeKindIfNilReturn, Var: primaryName, Zero: zero, WithError: hasError})
