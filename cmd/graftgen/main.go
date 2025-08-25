@@ -4,10 +4,35 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/calumari/graft/internal/generator"
 )
+
+// deriveVersion inspects build info for module version or vcs revision.
+// preference order: module semantic version -> short commit hash -> "devel".
+func deriveVersion() string {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+			return bi.Main.Version
+		}
+		var revision string
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" && s.Value != "" {
+				revision = s.Value
+				break
+			}
+		}
+		if len(revision) >= 12 { // short hash for readability
+			return revision[:12]
+		}
+		if revision != "" {
+			return revision
+		}
+	}
+	return "devel"
+}
 
 func main() {
 	var interfacesCSV string
@@ -39,21 +64,25 @@ func main() {
 	for i := range interfaces {
 		interfaces[i] = strings.TrimSpace(interfaces[i])
 	}
-	var customFuncs []string
-	if customFuncsCSV != "" {
-		customFuncs = strings.Split(customFuncsCSV, ",")
-		for i := range customFuncs {
-			customFuncs[i] = strings.TrimSpace(customFuncs[i])
-		}
+	customFuncs := strings.Split(customFuncsCSV, ",")
+	for i := range customFuncs {
+		customFuncs[i] = strings.TrimSpace(customFuncs[i])
 	}
 
-	cfg := generator.Config{
-		Dir:         dir,
-		Interfaces:  interfaces,
-		Output:      output,
-		Debug:       debug,
-		CustomFuncs: customFuncs,
+	// build a simplified canonical command representation instead of raw argv (which may include build cache paths)
+	cmdParts := []string{"graftgen", "-interface=" + strings.Join(interfaces, ","), "-output=" + output}
+	if dir != "." {
+		cmdParts = append(cmdParts, "-dir="+dir)
 	}
+	if debug {
+		cmdParts = append(cmdParts, "-debug")
+	}
+	if len(customFuncs) > 0 {
+		cmdParts = append(cmdParts, "-custom_funcs="+strings.Join(customFuncs, ","))
+	}
+	displayCmd := strings.Join(cmdParts, " ")
+	buildVersion := deriveVersion()
+	cfg := generator.Config{Dir: dir, Interfaces: interfaces, Output: output, Debug: debug, CustomFuncs: customFuncs, Command: displayCmd, Version: buildVersion}
 	if err := generator.Run(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "graft: %v\n", err)
 		os.Exit(1)

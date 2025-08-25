@@ -44,6 +44,8 @@ type Config struct {
 	Output      string   // output filename
 	CustomFuncs []string // optional: specific custom function names to consider (empty = discover all exported)
 	Debug       bool     // when true, inject template debug comments linking nodes to templates
+	Command     string   // full invocation command line
+	Version     string   // graftgen build version
 }
 
 // fileModel is the root template model for a generated file.
@@ -54,6 +56,8 @@ type fileModel struct {
 	Interfaces  []interfaceModel
 	NeedContext bool
 	Debug       bool
+	Command     string
+	Version     string
 }
 
 // interfaceModel describes a single interface mapping plan.
@@ -268,7 +272,7 @@ func (g *generator) run(cfg Config) error {
 		}
 	}
 
-	data := fileModel{Package: pkg.Name, Source: strings.Join(cfg.Interfaces, ", "), Helpers: g.helperModels, Interfaces: interfaceModels, NeedContext: needCtx, Debug: cfg.Debug}
+	data := fileModel{Package: pkg.Name, Source: strings.Join(cfg.Interfaces, ", "), Helpers: g.helperModels, Interfaces: interfaceModels, NeedContext: needCtx, Debug: cfg.Debug, Command: cfg.Command, Version: cfg.Version}
 
 	var out bytes.Buffer
 	if err := fileTmpl.ExecuteTemplate(&out, tmplFile, data); err != nil {
