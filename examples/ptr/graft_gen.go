@@ -5,8 +5,8 @@
 
 package ptr
 
-// map_c2b1489071c3 maps a value of type User to UserDTO.
-func map_c2b1489071c3(in User) UserDTO {
+// map_User_to_UserDTO maps a value of type User to UserDTO.
+func map_User_to_UserDTO(in User) UserDTO {
 	// Destination zero value; fields populated by node sequence below.
 	var dst UserDTO
 	dst.ID = in.ID
@@ -14,8 +14,8 @@ func map_c2b1489071c3(in User) UserDTO {
 	return dst
 }
 
-// map_fd87b162916e maps a value of type *User to UserDTO.
-func map_fd87b162916e(in *User) UserDTO {
+// map_Ptr_User_to_UserDTO maps a value of type *User to UserDTO.
+func map_Ptr_User_to_UserDTO(in *User) UserDTO {
 	if in == nil {
 		return UserDTO{}
 	}
@@ -26,8 +26,8 @@ func map_fd87b162916e(in *User) UserDTO {
 	return dst
 }
 
-// map_82ccc81fd210 maps a value of type *User to *UserDTO.
-func map_82ccc81fd210(in *User) *UserDTO {
+// map_Ptr_User_to_Ptr_UserDTO maps a value of type *User to *UserDTO.
+func map_Ptr_User_to_Ptr_UserDTO(in *User) *UserDTO {
 	if in == nil {
 		return nil
 	}
@@ -38,8 +38,8 @@ func map_82ccc81fd210(in *User) *UserDTO {
 	return dst
 }
 
-// map_168535d375f4 maps a value of type User to *UserDTO.
-func map_168535d375f4(in User) *UserDTO {
+// map_User_to_Ptr_UserDTO maps a value of type User to *UserDTO.
+func map_User_to_Ptr_UserDTO(in User) *UserDTO {
 	// Allocate destination pointer
 	dst := new(UserDTO)
 	dst.ID = in.ID
@@ -55,20 +55,20 @@ func NewUserMapper() UserMapper { return &userMapperImpl{} }
 
 // ToDTO maps p0 to the destination type.
 func (m *userMapperImpl) ToDTO(p0 User) UserDTO {
-	return map_c2b1489071c3(p0)
+	return map_User_to_UserDTO(p0)
 }
 
 // ToDTOFromPtr maps p0 to the destination type.
 func (m *userMapperImpl) ToDTOFromPtr(p0 *User) UserDTO {
-	return map_fd87b162916e(p0)
+	return map_Ptr_User_to_UserDTO(p0)
 }
 
 // ToDTOPtr maps p0 to the destination type.
 func (m *userMapperImpl) ToDTOPtr(p0 *User) *UserDTO {
-	return map_82ccc81fd210(p0)
+	return map_Ptr_User_to_Ptr_UserDTO(p0)
 }
 
 // ToDTOPtrFromVal maps p0 to the destination type.
 func (m *userMapperImpl) ToDTOPtrFromVal(p0 User) *UserDTO {
-	return map_168535d375f4(p0)
+	return map_User_to_Ptr_UserDTO(p0)
 }

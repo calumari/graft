@@ -50,7 +50,7 @@ func (g *generator) run(cfg Config) error {
 		return fmt.Errorf("interfaces not found: %s", strings.Join(missing, ", "))
 	}
 	sort.Strings(cfg.Interfaces)
-	g.helperSet = make(map[string]bool)
+	g.helperNames = make(map[string]string)
 	g.helperModels = nil
 	funcMap := g.discoverCustomFuncs(pkg, cfg.CustomFuncs)
 	for k, mi := range funcMap {

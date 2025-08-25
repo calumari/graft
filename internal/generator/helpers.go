@@ -90,11 +90,11 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 // ensureStructHelper creates (or reuses) a helper for struct<-struct mappings.
 func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 	key := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
-	if g.helperSet[key] {
-		return helperNameFor(key)
+	if name, ok := g.helperNames[key]; ok {
+		return name
 	}
-	g.helperSet[key] = true
-	name := helperNameFor(key)
+	name := g.helperName(srcType, destType, false)
+	g.helperNames[key] = name
 	sStruct, sPtr := underlyingStruct(srcType)
 	_, dPtr := underlyingStruct(destType)
 	if sStruct == nil {
@@ -127,11 +127,11 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 // ensureCompositeHelper creates a helper for top-level slice/array/map mapping.
 func (g *generator) ensureCompositeHelper(srcType, destType types.Type) string {
 	key := "comp:" + types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
-	if g.helperSet[key] {
-		return helperNameFor(key)
+	if name, ok := g.helperNames[key]; ok {
+		return name
 	}
-	g.helperSet[key] = true
-	name := helperNameFor(key)
+	name := g.helperName(srcType, destType, true)
+	g.helperNames[key] = name
 	plan := helperPlan{Name: name, SrcGoType: srcType, DestGoType: destType, Composite: true}
 	g.helperPlans = append(g.helperPlans, plan)
 	return name

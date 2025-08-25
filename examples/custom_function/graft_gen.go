@@ -5,8 +5,8 @@
 
 package custom_function
 
-// map_09a6260f7c56 maps a value of type A to B.
-func map_09a6260f7c56(in A) B {
+// map_A_to_B maps a value of type A to B.
+func map_A_to_B(in A) B {
 	// Destination zero value; fields populated by node sequence below.
 	var dst B
 	dst = AToB(in)
@@ -14,8 +14,8 @@ func map_09a6260f7c56(in A) B {
 	return dst
 }
 
-// map_19edd3398535 maps a value of type *A to *B.
-func map_19edd3398535(in *A) (*B, error) {
+// map_Ptr_A_to_Ptr_B maps a value of type *A to *B.
+func map_Ptr_A_to_Ptr_B(in *A) (*B, error) {
 	if in == nil {
 		return nil, nil
 	}
@@ -38,10 +38,10 @@ func NewMapper() Mapper { return &mapperImpl{} }
 
 // Map maps a to the destination type.
 func (m *mapperImpl) Map(a A) B {
-	return map_09a6260f7c56(a)
+	return map_A_to_B(a)
 }
 
 // MapErr maps a to the destination type.
 func (m *mapperImpl) MapErr(a *A) (*B, error) {
-	return map_19edd3398535(a)
+	return map_Ptr_A_to_Ptr_B(a)
 }

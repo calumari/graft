@@ -5,8 +5,8 @@
 
 package nested
 
-// map_a80deba95087 maps a value of type Address to AddressDTO.
-func map_a80deba95087(in Address) AddressDTO {
+// map_Address_to_AddressDTO maps a value of type Address to AddressDTO.
+func map_Address_to_AddressDTO(in Address) AddressDTO {
 	// Destination zero value; fields populated by node sequence below.
 	var dst AddressDTO
 	dst.Street = in.Street
@@ -14,13 +14,13 @@ func map_a80deba95087(in Address) AddressDTO {
 	return dst
 }
 
-// map_c2b1489071c3 maps a value of type User to UserDTO.
-func map_c2b1489071c3(in User) UserDTO {
+// map_User_to_UserDTO maps a value of type User to UserDTO.
+func map_User_to_UserDTO(in User) UserDTO {
 	// Destination zero value; fields populated by node sequence below.
 	var dst UserDTO
 	dst.ID = in.ID
 	dst.Name = in.Name
-	dst.Addr = map_a80deba95087(in.Addr)
+	dst.Addr = map_Address_to_AddressDTO(in.Addr)
 
 	return dst
 }
@@ -33,7 +33,7 @@ func NewAddressMapper() AddressMapper { return &addressMapperImpl{} }
 
 // AddressToDTO maps p0 to the destination type.
 func (m *addressMapperImpl) AddressToDTO(p0 Address) AddressDTO {
-	return map_a80deba95087(p0)
+	return map_Address_to_AddressDTO(p0)
 }
 
 // userMapperImpl is the generated implementation of UserMapper.
@@ -44,5 +44,5 @@ func NewUserMapper() UserMapper { return &userMapperImpl{} }
 
 // UserToDTO maps p0 to the destination type.
 func (m *userMapperImpl) UserToDTO(p0 User) UserDTO {
-	return map_c2b1489071c3(p0)
+	return map_User_to_UserDTO(p0)
 }

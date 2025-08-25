@@ -5,15 +5,15 @@
 
 package collections
 
-// map_3f15186025aa maps a value of type []Elem to []ElemDTO.
-func map_3f15186025aa(in []Elem) ([]ElemDTO, error) {
+// mapc_Slice_Elem_to_Slice_ElemDTO maps a value of type []Elem to []ElemDTO.
+func mapc_Slice_Elem_to_Slice_ElemDTO(in []Elem) ([]ElemDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst []ElemDTO
 	if in != nil {
 		dst = make([]ElemDTO, len(in))
 		for i, v := range in { // v used by child nodes
 			var mapped ElemDTO
-			tmp, err := map_0662979fb6d6(v)
+			tmp, err := map_Elem_to_ElemDTO(v)
 			if err != nil {
 				return dst, err
 			}
@@ -27,15 +27,15 @@ func map_3f15186025aa(in []Elem) ([]ElemDTO, error) {
 	return dst, nil
 }
 
-// map_d0ac0bbc1462 maps a value of type map[string]Elem to map[string]ElemDTO.
-func map_d0ac0bbc1462(in map[string]Elem) (map[string]ElemDTO, error) {
+// mapc_Map_string_To_Elem_to_Map_string_To_ElemDTO maps a value of type map[string]Elem to map[string]ElemDTO.
+func mapc_Map_string_To_Elem_to_Map_string_To_ElemDTO(in map[string]Elem) (map[string]ElemDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst map[string]ElemDTO
 	if in != nil {
 		dst = make(map[string]ElemDTO, len(in))
 		for k, v := range in { // k,v used by child nodes
 			var mapped ElemDTO
-			tmp, err := map_0662979fb6d6(v)
+			tmp, err := map_Elem_to_ElemDTO(v)
 			if err != nil {
 				return dst, err
 			}
@@ -49,8 +49,8 @@ func map_d0ac0bbc1462(in map[string]Elem) (map[string]ElemDTO, error) {
 	return dst, nil
 }
 
-// map_480c38455f38 maps a value of type MapContainer to MapContainerDTO.
-func map_480c38455f38(in MapContainer) (MapContainerDTO, error) {
+// map_MapContainer_to_MapContainerDTO maps a value of type MapContainer to MapContainerDTO.
+func map_MapContainer_to_MapContainerDTO(in MapContainer) (MapContainerDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst MapContainerDTO
 	if in.Items != nil {
@@ -71,8 +71,8 @@ func map_480c38455f38(in MapContainer) (MapContainerDTO, error) {
 	return dst, nil
 }
 
-// map_652530217676 maps a value of type SliceContainer to SliceContainerDTO.
-func map_652530217676(in SliceContainer) (SliceContainerDTO, error) {
+// map_SliceContainer_to_SliceContainerDTO maps a value of type SliceContainer to SliceContainerDTO.
+func map_SliceContainer_to_SliceContainerDTO(in SliceContainer) (SliceContainerDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst SliceContainerDTO
 	if in.Items != nil {
@@ -93,8 +93,8 @@ func map_652530217676(in SliceContainer) (SliceContainerDTO, error) {
 	return dst, nil
 }
 
-// map_0662979fb6d6 maps a value of type Elem to ElemDTO.
-func map_0662979fb6d6(in Elem) (ElemDTO, error) {
+// map_Elem_to_ElemDTO maps a value of type Elem to ElemDTO.
+func map_Elem_to_ElemDTO(in Elem) (ElemDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst ElemDTO
 	tmp, err := ElemToElemDTO(in)
@@ -114,20 +114,20 @@ func NewColMapper() ColMapper { return &colMapperImpl{} }
 
 // Map maps p0 to the destination type.
 func (m *colMapperImpl) Map(p0 []Elem) ([]ElemDTO, error) {
-	return map_3f15186025aa(p0)
+	return mapc_Slice_Elem_to_Slice_ElemDTO(p0)
 }
 
 // MapMap maps p0 to the destination type.
 func (m *colMapperImpl) MapMap(p0 map[string]Elem) (map[string]ElemDTO, error) {
-	return map_d0ac0bbc1462(p0)
+	return mapc_Map_string_To_Elem_to_Map_string_To_ElemDTO(p0)
 }
 
 // MapMapContainer maps p0 to the destination type.
 func (m *colMapperImpl) MapMapContainer(p0 MapContainer) (MapContainerDTO, error) {
-	return map_480c38455f38(p0)
+	return map_MapContainer_to_MapContainerDTO(p0)
 }
 
 // MapSliceContainer maps p0 to the destination type.
 func (m *colMapperImpl) MapSliceContainer(p0 SliceContainer) (SliceContainerDTO, error) {
-	return map_652530217676(p0)
+	return map_SliceContainer_to_SliceContainerDTO(p0)
 }

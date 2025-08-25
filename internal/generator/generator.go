@@ -1,9 +1,9 @@
 package generator
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
+	"fmt"
 	"go/types"
+	"regexp"
 	"strings"
 )
 
@@ -12,7 +12,7 @@ type generator struct {
 	currentPkgName string
 	// registry maps src->dest (and src->dest#err) to metadata for interface methods or custom funcs.
 	registry     map[string]registryEntry
-	helperSet    map[string]bool
+	helperNames  map[string]string // key -> helper function name
 	helperModels []helperModel
 	helperPlans  []helperPlan // planning data for two-pass population
 }
@@ -22,8 +22,7 @@ func Run(cfg Config) error { return newGenerator().run(cfg) }
 func newGenerator() *generator {
 	return &generator{
 		registry:    make(map[string]registryEntry),
-		helperSet:   make(map[string]bool),
-		helperPlans: nil,
+		helperNames: make(map[string]string),
 	}
 }
 
@@ -128,9 +127,45 @@ func prefixSrc(param string, isPtr bool) string {
 	return param + "."
 }
 
-func helperNameFor(key string) string {
-	h := sha1.Sum([]byte(key))
-	return "map_" + hex.EncodeToString(h[:6])
+// helperName derives a deterministic (readable) name. Format:
+// map_<Src>_to_<Dest>_<N> where Src/Dest are simplified type tokens.
+func (g *generator) helperName(srcType, destType types.Type, composite bool) string {
+	// Encode structure of types so names are stable and collision-free across runs.
+	var tok func(types.Type) string
+	tok = func(t types.Type) string {
+		switch tt := t.(type) {
+		case *types.Pointer:
+			return fmt.Sprintf("Ptr_%s", tok(tt.Elem()))
+		case *types.Slice:
+			return fmt.Sprintf("Slice_%s", tok(tt.Elem()))
+		case *types.Array:
+			return fmt.Sprintf("Array_%d_%s", tt.Len(), tok(tt.Elem()))
+		case *types.Map:
+			return "Map_" + tok(tt.Key()) + "_To_" + tok(tt.Elem())
+		case *types.Named:
+			obj := tt.Obj()
+			if obj != nil {
+				if obj.Pkg() != nil && obj.Pkg().Name() != g.currentPkgName {
+					return fmt.Sprintf("%s_%s", obj.Pkg().Name(), obj.Name())
+				}
+				return obj.Name()
+			}
+		}
+		// Fallback: sanitize the type string.
+		s := types.TypeString(t, g.qualifier)
+		re := regexp.MustCompile(`[^A-Za-z0-9]+`)
+		s = re.ReplaceAllString(s, "_")
+		s = strings.Trim(s, "_")
+		if s == "" {
+			return "T"
+		}
+		return s
+	}
+	prefix := "map"
+	if composite {
+		prefix = "mapc"
+	}
+	return prefix + "_" + tok(srcType) + "_to_" + tok(destType)
 }
 
 func findMatchingSourceField(src *types.Struct, name string) *types.Var {

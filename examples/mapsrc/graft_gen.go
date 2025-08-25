@@ -5,8 +5,8 @@
 
 package mapsrc
 
-// map_28faf228d970 maps a value of type Input to Output.
-func map_28faf228d970(in Input) Output {
+// map_Input_to_Output maps a value of type Input to Output.
+func map_Input_to_Output(in Input) Output {
 	// Destination zero value; fields populated by node sequence below.
 	var dst Output
 	dst.UserName = in.P.Name
@@ -23,5 +23,5 @@ func NewBuilder() Builder { return &builderImpl{} }
 
 // Build maps p0 to the destination type.
 func (m *builderImpl) Build(p0 Input) Output {
-	return map_28faf228d970(p0)
+	return map_Input_to_Output(p0)
 }

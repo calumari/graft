@@ -5,8 +5,8 @@
 
 package recursive
 
-// map_09a6260f7c56 maps a value of type A to B.
-func map_09a6260f7c56(in A) B {
+// map_A_to_B maps a value of type A to B.
+func map_A_to_B(in A) B {
 	// Destination zero value; fields populated by node sequence below.
 	var dst B
 	dst.Text = in.Text
@@ -22,5 +22,5 @@ func NewRecMapper() RecMapper { return &recMapperImpl{} }
 
 // AToB maps p0 to the destination type.
 func (m *recMapperImpl) AToB(p0 A) B {
-	return map_09a6260f7c56(p0)
+	return map_A_to_B(p0)
 }
