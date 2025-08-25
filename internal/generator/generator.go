@@ -15,15 +15,18 @@ type generator struct {
 	helperNames  map[string]string // key -> helper function name
 	helperModels []helperModel
 	helperPlans  []helperPlan // planning data for two-pass population
+	resolver     *fieldResolver
 }
 
 func Run(cfg Config) error { return newGenerator().run(cfg) }
 
 func newGenerator() *generator {
-	return &generator{
+	g := &generator{
 		registry:    make(map[string]registryEntry),
 		helperNames: make(map[string]string),
 	}
+	g.resolver = &fieldResolver{g: g}
+	return g
 }
 
 // helperPlan stores planning metadata prior to IR helperModel population.
@@ -209,6 +212,31 @@ func parseTag(tag string) map[string]string {
 		res[k] = v
 	}
 	return res
+}
+
+// package-level tag cache (single-threaded generator run)
+var tagCache = map[*types.Struct]map[int]map[string]string{}
+
+func parseTagCached(s *types.Struct, i int) map[string]string {
+	if s == nil || i < 0 || i >= s.NumFields() {
+		return nil
+	}
+	fm := tagCache[s]
+	if fm == nil {
+		fm = make(map[int]map[string]string)
+		tagCache[s] = fm
+	}
+	if cached, ok := fm[i]; ok {
+		return cached
+	}
+	raw := s.Tag(i)
+	if raw == "" {
+		fm[i] = nil
+		return nil
+	}
+	parsed := parseTag(raw)
+	fm[i] = parsed
+	return parsed
 }
 
 func customFuncKey(src, dest string, hasErr bool) string {
