@@ -1,0 +1,17 @@
+package basic
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestBasic(t *testing.T) {
+	t.Run("user input maps to user dto", func(t *testing.T) {
+		m := NewUserMapper()
+		in := User{ID: 1, Name: "Alice"}
+		out := m.UserToDTO(in)
+		require.Equal(t, 1, out.ID)
+		require.Equal(t, "Alice", out.Name)
+	})
+}
