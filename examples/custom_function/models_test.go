@@ -15,7 +15,7 @@ func TestCustomFunction(t *testing.T) {
 
 	t.Run("custom function propagates error", func(t *testing.T) {
 		m := NewMapper()
-		_, err := m.MapErr(A{N: -1})
+		_, err := m.MapErr(&A{N: -1})
 		require.Error(t, err)
 	})
 }

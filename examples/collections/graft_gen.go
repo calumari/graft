@@ -6,47 +6,60 @@
 package collections
 
 // map_0662979fb6d6 maps a value of type Elem to ElemDTO.
-func map_0662979fb6d6(in Elem) ElemDTO {
+func map_0662979fb6d6(in Elem) (ElemDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst ElemDTO
-	dst.V = in.V
-	return dst
+	tmp, err := ElemToElemDTO(in)
+	if err != nil {
+		return dst, err
+	}
+	dst = tmp
+
+	return dst, nil
 }
 
 // map_3f15186025aa maps a value of type []Elem to []ElemDTO.
-func map_3f15186025aa(in []Elem) []ElemDTO {
+func map_3f15186025aa(in []Elem) ([]ElemDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst []ElemDTO
 	if in != nil {
 		dst = make([]ElemDTO, len(in))
 		for i, v := range in { // v used by child nodes
 			var mapped ElemDTO
-			mapped = map_0662979fb6d6(v)
+			tmp, err := map_0662979fb6d6(v)
+			if err != nil {
+				return dst, err
+			}
+			mapped = tmp
 
 			dst[i] = mapped
 		}
 	} else {
 		dst = nil
 	}
-	return dst
+	return dst, nil
 }
 
 // map_d0ac0bbc1462 maps a value of type map[string]Elem to map[string]ElemDTO.
-func map_d0ac0bbc1462(in map[string]Elem) map[string]ElemDTO {
+func map_d0ac0bbc1462(in map[string]Elem) (map[string]ElemDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
 	var dst map[string]ElemDTO
 	if in != nil {
 		dst = make(map[string]ElemDTO, len(in))
 		for k, v := range in { // k,v used by child nodes
 			var mapped ElemDTO
-			mapped = map_0662979fb6d6(v)
+			tmp, err := map_0662979fb6d6(v)
+			if err != nil {
+				return dst, err
+			}
+			mapped = tmp
 
 			dst[k] = mapped
 		}
 	} else {
 		dst = nil
 	}
-	return dst
+	return dst, nil
 }
 
 // map_480c38455f38 maps a value of type MapContainer to MapContainerDTO.
@@ -101,12 +114,12 @@ func NewColMapper() ColMapper { return &colMapperImpl{} }
 
 // Map maps p0 to the destination type.
 func (m *colMapperImpl) Map(p0 []Elem) ([]ElemDTO, error) {
-	return map_3f15186025aa(p0), nil
+	return map_3f15186025aa(p0)
 }
 
 // MapMap maps p0 to the destination type.
 func (m *colMapperImpl) MapMap(p0 map[string]Elem) (map[string]ElemDTO, error) {
-	return map_d0ac0bbc1462(p0), nil
+	return map_d0ac0bbc1462(p0)
 }
 
 // MapMapContainer maps p0 to the destination type.

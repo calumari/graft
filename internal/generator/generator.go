@@ -89,12 +89,16 @@ type paramModel struct {
 // helperModel represents an internal helper function we synthesize for struct
 // or collection mapping.
 type helperModel struct {
-	Name       string
-	SrcType    string
-	DestType   string
-	Body       []codeNode
-	HasError   bool
-	HasContext bool
+	Name          string
+	SrcType       string
+	DestType      string
+	Body          []codeNode
+	HasError      bool
+	HasContext    bool
+	SrcIsPtr      bool
+	DestIsPtr     bool
+	UnderDestType string // underlying struct type when DestIsPtr
+	ZeroReturn    string // zero literal used for early return on nil src when SrcIsPtr
 }
 
 // codeNode is an ir node used by templates to emit code fragments.
@@ -385,7 +389,7 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 
 	srcType := sig.Params().At(primaryIdx).Type()
 	destType := sig.Results().At(0).Type()
-	srcStruct, srcPtr := underlyingStruct(srcType)
+	srcStruct, _ := underlyingStruct(srcType)
 	destStruct, destPtr := underlyingStruct(destType)
 	isStructMapping := srcStruct != nil && destStruct != nil
 	compositeAllowed := isCollectionLike(srcType) && isCollectionLike(destType)
@@ -398,63 +402,13 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 	var nodes []codeNode
 
 	if isStructMapping {
-		if len(params) == 1 { // single param path
-			baseKey := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
-			var mi methodInfo
-			var okFn bool
-			// prefer error variant when method has error; fall back to non-error if only that exists
-			if hasError {
-				if errVariant, okErr := g.customFuncs[baseKey+"#err"]; okErr {
-					mi, okFn = errVariant, true
-				} else if nonErrVariant, okNon := g.customFuncs[baseKey]; okNon {
-					mi, okFn = nonErrVariant, true
-				}
-			} else {
-				mi, okFn = g.customFuncs[baseKey]
-			}
-			if okFn && mi.IsFunc { // direct custom function (error variant chosen when available above)
-				if srcPtr {
-					zero := g.zeroValue(destType)
-					nodes = append(nodes, codeNode{Kind: nodeKindIfNilReturn, Var: primaryName, Zero: zero, WithError: hasError})
-				}
-				callArg := primaryName
-				if srcPtr {
-					callArg = "*" + primaryName
-				}
-				varName := "dst"
-				if destPtr {
-					varName = "mapped"
-				}
-				nodes = append(nodes, codeNode{Kind: nodeKindDestInit, Var: varName, DestType: types.TypeString(destType, g.qualifier)})
-				nodes = append(nodes, codeNode{Kind: nodeKindAssignFunc, Dest: varName, Method: mi.Name, Arg: callArg, WithError: mi.HasError})
-				retExpr := varName
-				if destPtr {
-					retExpr = "&" + varName
-				}
-				nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: retExpr, WithError: hasError})
-			} else { // helper path
-				var helperName string
-				if srcPtr {
-					helperName = g.ensureStructHelper(srcStruct, destStruct)
-				} else {
-					helperName = g.ensureStructHelper(srcType, destType)
-				}
-				if srcPtr {
-					zero := g.zeroValue(destType)
-					nodes = append(nodes, codeNode{Kind: nodeKindIfNilReturn, Var: primaryName, Zero: zero, WithError: hasError})
-				}
-				callArg := primaryName
-				if srcPtr {
-					callArg = "*" + primaryName
-				}
-				callExpr := helperName + "(" + callArg + ")"
-				if destPtr {
-					nodes = append(nodes, codeNode{Kind: nodeKindDestInit, Var: "mapped", DestType: types.TypeString(destType, g.qualifier)})
-					nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: "&mapped", WithError: hasError})
-				} else {
-					nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: callExpr, WithError: hasError})
-				}
-			}
+		if len(params) == 1 { // single param struct mapping always delegate to helper
+			helperName := g.ensureStructHelper(srcType, destType)
+			callExpr := helperName + "(" + primaryName + ")"
+			// If helper itself returns error, treat this method as directly returning that tuple.
+			// We'll mark node.WithError only when method signature has error (hasError) and helper returns error.
+			n := codeNode{Kind: nodeKindReturn, Expr: callExpr, WithError: hasError}
+			nodes = append(nodes, n)
 		} else { // multi-param inline mapping path: inline mapping logic; helper would not simplify
 			// prepare param struct map
 			paramStructs := map[string]*types.Struct{}
@@ -727,7 +681,7 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 						return []codeNode{{Kind: kind, Src: srcExpr, Dest: destExpr, Method: mi.Name, WithError: mi.HasError, UseContext: g.currentCtxName != "", CtxName: g.currentCtxName}}
 					}
 				}
-				helper := g.ensureStructHelper(st.Elem(), dt.Elem())
+				helper := g.ensureStructHelper(srcType, destType)
 				return []codeNode{{Kind: nodeKindPtrStructMap, Src: srcExpr, Dest: destExpr, Helper: helper, UseContext: g.currentCtxName != ""}}
 			}
 		}
@@ -746,10 +700,37 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 	}
 	g.helperSet[key] = true
 	name := helperNameFor(key)
-	sStruct, _ := underlyingStruct(srcType)
-	dStruct, _ := underlyingStruct(destType)
+	sStruct, sPtr := underlyingStruct(srcType)
+	dStruct, dPtr := underlyingStruct(destType)
 	var body []codeNode
+	zeroRet := g.zeroValue(destType)
+	underDest := ""
+	if dPtr {
+		zeroRet = "nil"
+		if pt, ok := destType.(*types.Pointer); ok {
+			underDest = types.TypeString(pt.Elem(), g.qualifier)
+		}
+	}
 	if sStruct != nil && dStruct != nil {
+		// Custom function override (single param style) if available for full struct mapping.
+		// Prefer error variant (#err) when present.
+		baseKey := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
+		var mi methodInfo
+		var ok bool
+		if mi, ok = g.customFuncs[baseKey+"#err"]; ok && mi.IsFunc && mi.HasError { // error variant
+			body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: "dst", Method: mi.Name, Arg: "in", WithError: true})
+			g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet, HasError: true})
+			return name
+		}
+		if mi, ok = g.customFuncs[baseKey]; ok && mi.IsFunc { // non-error variant
+			body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: "dst", Method: mi.Name, Arg: "in", WithError: false})
+			g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet})
+			return name
+		}
+		// destination variable always named 'dst' (pointer helpers allocate &Type{})
+		destVar := "dst"
+		// source field prefix (handle pointer source)
+		srcPrefix := "in." // for pointer sources we still access fields via in.Field (not *in.Field)
 		for i := 0; i < dStruct.NumFields(); i++ {
 			df := dStruct.Field(i)
 			if !df.Exported() {
@@ -812,7 +793,8 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 					currType = f.Type()
 				}
 				if okPath {
-					body = append(body, g.buildAssignmentNodes("dst."+fname, expr, df.Type(), currType, "")...)
+					// adjust expr when pointer source & we built value path (we already include * when needed in srcPrefix logic for simple fields)
+					body = append(body, g.buildAssignmentNodes(destVar+"."+fname, expr, df.Type(), currType, "")...)
 					continue
 				}
 			}
@@ -830,18 +812,18 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 									if dslice, okd := df.Type().(*types.Slice); okd {
 										child := []codeNode{{Kind: nodeKindAssignFunc, Dest: "mapped", Method: explicitFunc, Arg: "v", WithError: sig.Results().Len() == 2}}
 										loopErr := sig.Results().Len() == 2
-										body = append(body, codeNode{Kind: nodeKindSliceMap, Src: "in." + sf.Name(), Dest: "dst." + fname, DestType: types.TypeString(dslice, g.qualifier), ElemType: types.TypeString(dslice.Elem(), g.qualifier), Children: child, LoopWithError: loopErr})
+										body = append(body, codeNode{Kind: nodeKindSliceMap, Src: "in." + sf.Name(), Dest: destVar + "." + fname, DestType: types.TypeString(dslice, g.qualifier), ElemType: types.TypeString(dslice.Elem(), g.qualifier), Children: child, LoopWithError: loopErr})
 										continue
 									}
 									// map: per-value
 									if dmap, okd := df.Type().(*types.Map); okd {
 										child := []codeNode{{Kind: nodeKindAssignFunc, Dest: "mapped", Method: explicitFunc, Arg: "v", WithError: sig.Results().Len() == 2}}
 										loopErr := sig.Results().Len() == 2
-										body = append(body, codeNode{Kind: nodeKindMapMap, Src: "in." + sf.Name(), Dest: "dst." + fname, DestType: types.TypeString(dmap, g.qualifier), ElemType: types.TypeString(dmap.Elem(), g.qualifier), Children: child, LoopWithError: loopErr})
+										body = append(body, codeNode{Kind: nodeKindMapMap, Src: "in." + sf.Name(), Dest: destVar + "." + fname, DestType: types.TypeString(dmap, g.qualifier), ElemType: types.TypeString(dmap.Elem(), g.qualifier), Children: child, LoopWithError: loopErr})
 										continue
 									}
 									// fallback: simple value mapping
-									body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: "dst." + fname, Method: explicitFunc, Arg: "in." + sf.Name(), WithError: sig.Results().Len() == 2})
+									body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: destVar + "." + fname, Method: explicitFunc, Arg: "in." + sf.Name(), WithError: sig.Results().Len() == 2})
 									continue
 								}
 							}
@@ -851,10 +833,12 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 				body = append(body, codeNode{Kind: nodeKindComment, Comment: "mapfn not found or invalid: " + explicitFunc})
 				continue
 			}
-			body = append(body, g.buildAssignmentNodes("dst."+fname, "in."+sf.Name(), df.Type(), sf.Type(), "")...)
+			if sf != nil && explicitFunc == "" {
+				body = append(body, g.buildAssignmentNodes(destVar+"."+fname, srcPrefix+sf.Name(), df.Type(), sf.Type(), "")...)
+			}
 		}
 	}
-	g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body})
+	g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet})
 	return name
 }
 
@@ -868,6 +852,7 @@ func (g *generator) ensureCompositeHelper(srcType, destType types.Type) string {
 	g.helperSet[key] = true
 	name := helperNameFor(key)
 	body := g.buildAssignmentNodes("dst", "in", destType, srcType, "")
+	// Error status for composite helpers inferred later in computeHelperErrors; keep initial HasError false.
 	g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body})
 	return name
 }
@@ -878,29 +863,33 @@ func (g *generator) computeHelperErrors() {
 	for i := range g.helperModels {
 		index[g.helperModels[i].Name] = &g.helperModels[i]
 	}
-	marksHelper := func(h *helperModel) bool {
-		var needs bool
-		for _, n := range h.Body {
-			if n.Kind == nodeKindAssignMethod || n.Kind == nodeKindPtrMethodMap {
-				if n.WithError {
-					needs = true
-					break
-				}
-			}
-			if n.Kind == nodeKindAssignHelper || n.Kind == nodeKindPtrStructMap {
-				if index[n.Helper] != nil && index[n.Helper].HasError {
-					needs = true
-					break
-				}
-			}
-			for _, c := range n.Children {
-				if c.WithError {
-					needs = true
-					break
-				}
+	var matchesErrNode func(codeNode) bool
+	matchesErrNode = func(n codeNode) bool {
+		if n.Kind == nodeKindAssignMethod || n.Kind == nodeKindPtrMethodMap {
+			return n.WithError
+		}
+		if n.Kind == nodeKindAssignHelper || n.Kind == nodeKindPtrStructMap {
+			if index[n.Helper] != nil && index[n.Helper].HasError {
+				return true
 			}
 		}
-		return needs
+		if n.WithError { // direct flag
+			return true
+		}
+		for _, c := range n.Children {
+			if matchesErrNode(c) {
+				return true
+			}
+		}
+		return false
+	}
+	marksHelper := func(h *helperModel) bool {
+		for _, n := range h.Body {
+			if matchesErrNode(n) {
+				return true
+			}
+		}
+		return false
 	}
 	for changed {
 		changed = false
@@ -945,10 +934,13 @@ func (g *generator) annotateNode(n *codeNode, helperErr map[string]bool) {
 			n.WithError = true
 		}
 	case nodeKindReturn:
-		if n.Expr != "" {
+		// If returning a helper call and helper itself returns error, don't append , nil.
+		if n.Expr != "" && helperErr != nil {
 			if idx := strings.Index(n.Expr, "("); idx > 0 {
-				if helperErr[n.Expr[:idx]] {
-					n.SuppressNil = true
+				name := n.Expr[:idx]
+				if helperErr[name] {
+					// helper returns (T,error); method already declares error so template should not add trailing , nil
+					n.WithError = false
 				}
 			}
 		}

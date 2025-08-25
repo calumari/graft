@@ -3,7 +3,7 @@
 // Source interfaces: AddressMapper, UserMapper
 // Command: graftgen -interface=UserMapper,AddressMapper -output=graft_gen.go
 
-package basic
+package nested
 
 // map_a80deba95087 maps a value of type Address to AddressDTO.
 func map_a80deba95087(in Address) AddressDTO {

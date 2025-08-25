@@ -5,6 +5,31 @@
 
 package custom_function
 
+// map_09a6260f7c56 maps a value of type A to B.
+func map_09a6260f7c56(in A) B {
+	// Destination zero value; fields populated by node sequence below.
+	var dst B
+	dst = AToB(in)
+
+	return dst
+}
+
+// map_19edd3398535 maps a value of type *A to *B.
+func map_19edd3398535(in *A) (*B, error) {
+	if in == nil {
+		return nil, nil
+	}
+	// Allocate destination pointer
+	dst := new(B)
+	tmp, err := AToBErr(in)
+	if err != nil {
+		return dst, err
+	}
+	dst = tmp
+
+	return dst, nil
+}
+
 // mapperImpl is the generated implementation of Mapper.
 type mapperImpl struct{}
 
@@ -13,20 +38,10 @@ func NewMapper() Mapper { return &mapperImpl{} }
 
 // Map maps a to the destination type.
 func (m *mapperImpl) Map(a A) B {
-	var dst B
-	dst = AToB(a)
-
-	return dst
+	return map_09a6260f7c56(a)
 }
 
 // MapErr maps a to the destination type.
-func (m *mapperImpl) MapErr(a A) (B, error) {
-	var dst B
-	tmp, err := AToBErr(a)
-	if err != nil {
-		return dst, err
-	}
-	dst = tmp
-
-	return dst, nil
+func (m *mapperImpl) MapErr(a *A) (*B, error) {
+	return map_19edd3398535(a)
 }

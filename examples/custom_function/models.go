@@ -18,11 +18,11 @@ func AToB(a A) B {
 }
 
 // Custom function (with error)
-func AToBErr(a A) (B, error) {
-	return B{}, errors.New("something went wrong")
+func AToBErr(a *A) (*B, error) {
+	return nil, errors.New("something went wrong")
 }
 
 type Mapper interface {
 	Map(a A) B
-	MapErr(a A) (B, error)
+	MapErr(a *A) (*B, error)
 }

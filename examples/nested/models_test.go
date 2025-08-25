@@ -1,4 +1,4 @@
-package basic
+package nested
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBasic(t *testing.T) {
+func TestNested(t *testing.T) {
 	t.Run("user input maps to user dto", func(t *testing.T) {
 		m := NewUserMapper()
 		in := User{ID: 1, Name: "Alice", Addr: Address{Street: "123 Main St", City: "Wonderland"}}

@@ -1,4 +1,4 @@
-package basic
+package nested
 
 //go:generate go run ../../cmd/graftgen -interface=UserMapper,AddressMapper -output=graft_gen.go
 
