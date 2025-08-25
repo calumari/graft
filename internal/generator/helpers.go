@@ -96,8 +96,10 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 	g.helperSet[key] = true
 	name := helperNameFor(key)
 	sStruct, sPtr := underlyingStruct(srcType)
-	dStruct, dPtr := underlyingStruct(destType)
-	var body []codeNode
+	_, dPtr := underlyingStruct(destType)
+	if sStruct == nil {
+		return name
+	}
 	zeroRet := g.zeroValue(destType)
 	underDest := ""
 	if dPtr {
@@ -106,28 +108,74 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 			underDest = types.TypeString(pt.Elem(), g.qualifier)
 		}
 	}
-	if sStruct != nil && dStruct != nil {
-		baseKey := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
-		if mi, ok := g.registry[baseKey+"#err"]; ok && mi.Kind == regKindCustomFunc && mi.HasError {
-			body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: "dst", Method: mi.Name, Arg: "in", WithError: true})
-			g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet, HasError: true})
-			return name
-		}
+	plan := helperPlan{Name: name, SrcGoType: srcType, DestGoType: destType, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet}
+	baseKey := types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
+	if mi, ok := g.registry[baseKey+"#err"]; ok && mi.Kind == regKindCustomFunc && mi.HasError {
+		plan.CustomFuncName = mi.Name
+		plan.CustomFuncHasError = true
+	}
+	if plan.CustomFuncName == "" {
 		if mi, ok := g.registry[baseKey]; ok && mi.Kind == regKindCustomFunc {
-			body = append(body, codeNode{Kind: nodeKindAssignFunc, Dest: "dst", Method: mi.Name, Arg: "in", WithError: false})
-			g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet})
-			return name
+			plan.CustomFuncName = mi.Name
+			plan.CustomFuncHasError = false
 		}
+	}
+	g.helperPlans = append(g.helperPlans, plan)
+	return name
+}
+
+// ensureCompositeHelper creates a helper for top-level slice/array/map mapping.
+func (g *generator) ensureCompositeHelper(srcType, destType types.Type) string {
+	key := "comp:" + types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
+	if g.helperSet[key] {
+		return helperNameFor(key)
+	}
+	g.helperSet[key] = true
+	name := helperNameFor(key)
+	plan := helperPlan{Name: name, SrcGoType: srcType, DestGoType: destType, Composite: true}
+	g.helperPlans = append(g.helperPlans, plan)
+	return name
+}
+
+// populateHelpers performs the second pass: filling helper bodies for any shell helpers.
+func (g *generator) populateHelpers() {
+	for i := 0; i < len(g.helperPlans); i++ { // dynamic length loop to handle newly appended plans
+		plan := &g.helperPlans[i]
+		if plan.Populated {
+			continue
+		}
+		// Build helperModel from plan
+		if plan.Composite {
+			body := g.buildAssignmentNodes("dst", "in", plan.DestGoType, plan.SrcGoType, "")
+			hm := helperModel{Name: plan.Name, SrcType: types.TypeString(plan.SrcGoType, g.qualifier), DestType: types.TypeString(plan.DestGoType, g.qualifier), Body: body}
+			g.helperModels = append(g.helperModels, hm)
+			plan.Populated = true
+			continue
+		}
+		if plan.CustomFuncName != "" {
+			hm := helperModel{Name: plan.Name, SrcType: types.TypeString(plan.SrcGoType, g.qualifier), DestType: types.TypeString(plan.DestGoType, g.qualifier), SrcIsPtr: plan.SrcIsPtr, DestIsPtr: plan.DestIsPtr, UnderDestType: plan.UnderDestType, ZeroReturn: plan.ZeroReturn, Body: []codeNode{{Kind: nodeKindAssignFunc, Dest: "dst", Method: plan.CustomFuncName, Arg: "in", WithError: plan.CustomFuncHasError}}, HasError: plan.CustomFuncHasError}
+			g.helperModels = append(g.helperModels, hm)
+			plan.Populated = true
+			continue
+		}
+		sStruct, _ := underlyingStruct(plan.SrcGoType)
+		dStruct, _ := underlyingStruct(plan.DestGoType)
+		if sStruct == nil || dStruct == nil {
+			plan.Populated = true
+			continue
+		}
+		var body []codeNode
 		destVar := "dst"
 		srcPrefix := "in."
-		for i := 0; i < dStruct.NumFields(); i++ {
-			df := dStruct.Field(i)
+		for fi := 0; fi < dStruct.NumFields(); fi++ {
+			df := dStruct.Field(fi)
 			if !df.Exported() {
 				continue
 			}
 			fname := df.Name()
-			var explicitFunc, explicitSrcPath string
-			if tag := dStruct.Tag(i); tag != "" {
+			explicitFunc := ""
+			explicitSrcPath := ""
+			if tag := dStruct.Tag(fi); tag != "" {
 				pt := parseTag(tag)
 				if fn := pt["mapfn"]; fn != "" {
 					explicitFunc = fn
@@ -141,7 +189,7 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 				sf = findTaggedSourceField(sStruct, fname)
 			}
 			if sf == nil {
-				if tag := dStruct.Tag(i); tag != "" {
+				if tag := dStruct.Tag(fi); tag != "" {
 					if sourceName := parseTag(tag)["map"]; sourceName != "" {
 						sf = findMatchingSourceField(sStruct, sourceName)
 						if sf == nil {
@@ -156,7 +204,7 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 			}
 			if explicitSrcPath != "" && explicitFunc == "" {
 				parts := strings.Split(explicitSrcPath, ".")
-				currType := srcType
+				currType := plan.SrcGoType
 				expr := "in"
 				okPath := true
 				for _, seg := range parts {
@@ -221,20 +269,21 @@ func (g *generator) ensureStructHelper(srcType, destType types.Type) string {
 				body = append(body, g.buildAssignmentNodes(destVar+"."+fname, srcPrefix+sf.Name(), df.Type(), sf.Type(), "")...)
 			}
 		}
+		hasErr := false
+		var scan func([]codeNode)
+		scan = func(nodes []codeNode) {
+			for _, n := range nodes {
+				if n.WithError || n.LoopWithError {
+					hasErr = true
+				}
+				if len(n.Children) > 0 {
+					scan(n.Children)
+				}
+			}
+		}
+		scan(body)
+		hm := helperModel{Name: plan.Name, SrcType: types.TypeString(plan.SrcGoType, g.qualifier), DestType: types.TypeString(plan.DestGoType, g.qualifier), SrcIsPtr: plan.SrcIsPtr, DestIsPtr: plan.DestIsPtr, UnderDestType: plan.UnderDestType, ZeroReturn: plan.ZeroReturn, Body: body, HasError: hasErr}
+		g.helperModels = append(g.helperModels, hm)
+		plan.Populated = true
 	}
-	g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body, SrcIsPtr: sPtr, DestIsPtr: dPtr, UnderDestType: underDest, ZeroReturn: zeroRet})
-	return name
-}
-
-// ensureCompositeHelper creates a helper for top-level slice/array/map mapping.
-func (g *generator) ensureCompositeHelper(srcType, destType types.Type) string {
-	key := "comp:" + types.TypeString(srcType, g.qualifier) + "->" + types.TypeString(destType, g.qualifier)
-	if g.helperSet[key] {
-		return helperNameFor(key)
-	}
-	g.helperSet[key] = true
-	name := helperNameFor(key)
-	body := g.buildAssignmentNodes("dst", "in", destType, srcType, "")
-	g.helperModels = append(g.helperModels, helperModel{Name: name, SrcType: types.TypeString(srcType, g.qualifier), DestType: types.TypeString(destType, g.qualifier), Body: body})
-	return name
 }

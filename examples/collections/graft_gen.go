@@ -5,19 +5,6 @@
 
 package collections
 
-// map_0662979fb6d6 maps a value of type Elem to ElemDTO.
-func map_0662979fb6d6(in Elem) (ElemDTO, error) {
-	// Destination zero value; fields populated by node sequence below.
-	var dst ElemDTO
-	tmp, err := ElemToElemDTO(in)
-	if err != nil {
-		return dst, err
-	}
-	dst = tmp
-
-	return dst, nil
-}
-
 // map_3f15186025aa maps a value of type []Elem to []ElemDTO.
 func map_3f15186025aa(in []Elem) ([]ElemDTO, error) {
 	// Destination zero value; fields populated by node sequence below.
@@ -103,6 +90,19 @@ func map_652530217676(in SliceContainer) (SliceContainerDTO, error) {
 	} else {
 		dst.Items = nil
 	}
+	return dst, nil
+}
+
+// map_0662979fb6d6 maps a value of type Elem to ElemDTO.
+func map_0662979fb6d6(in Elem) (ElemDTO, error) {
+	// Destination zero value; fields populated by node sequence below.
+	var dst ElemDTO
+	tmp, err := ElemToElemDTO(in)
+	if err != nil {
+		return dst, err
+	}
+	dst = tmp
+
 	return dst, nil
 }
 

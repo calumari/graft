@@ -6,73 +6,29 @@ import (
 	"strings"
 )
 
-// buildMethodModel models a single mapper interface method, constructing its IR nodes.
-func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodModel, error) {
+// buildMethodModelFromPlan constructs the methodModel body using an existing methodPlan.
+func (g *generator) buildMethodModelFromPlan(mp methodPlan) (*methodModel, error) {
 	g.currentCtxName = ""
-	sig, ok := m.Type().(*types.Signature)
-	if !ok {
-		return nil, fmt.Errorf("not a signature")
+	sig := mp.Signature
+	params := mp.Params
+	ctxIndex := mp.CtxIndex
+	if ctxIndex >= 0 && ctxIndex < len(params) {
+		g.currentCtxName = params[ctxIndex].Name
 	}
-	if sig.Params().Len() < 1 {
-		return nil, fmt.Errorf("method must have at least one parameter")
-	}
-	if sig.Results().Len() < 1 || sig.Results().Len() > 2 {
-		return nil, fmt.Errorf("method must have 1 or 2 results")
-	}
-	if sig.Results().Len() == 2 && !isErrorType(sig.Results().At(1).Type()) {
-		return nil, fmt.Errorf("second result must be error")
-	}
-
-	var params []paramModel
-	primaryIdx := -1
-	ctxIndex := -1
-	for i := 0; i < sig.Params().Len(); i++ {
-		p := sig.Params().At(i)
-		pname := p.Name()
-		if pname == "" {
-			pname = fmt.Sprintf("p%d", i)
-		}
-		if nt, ok := p.Type().(*types.Named); ok {
-			if obj := nt.Obj(); obj != nil && obj.Name() == "Context" {
-				if pkg := obj.Pkg(); pkg != nil && pkg.Path() == "context" {
-					ctxIndex = i
-					g.currentCtxName = pname
-				}
-			}
-		}
-		params = append(params, paramModel{Name: pname, Type: types.TypeString(p.Type(), g.qualifier)})
-		if i == ctxIndex {
-			continue
-		}
-		if primaryIdx == -1 {
-			if s, _ := underlyingStruct(p.Type()); s != nil || isCollectionLike(p.Type()) {
-				primaryIdx = i
-			}
-		}
-	}
-	if primaryIdx == -1 {
-		return nil, fmt.Errorf("no struct or collection parameter to map from")
-	}
-
+	hasError := mp.HasError
+	primaryIdx := mp.PrimaryIndex
 	srcType := sig.Params().At(primaryIdx).Type()
 	destType := sig.Results().At(0).Type()
-	srcStruct, _ := underlyingStruct(srcType)
 	destStruct, destPtr := underlyingStruct(destType)
-	isStructMapping := srcStruct != nil && destStruct != nil
-	compositeAllowed := isCollectionLike(srcType) && isCollectionLike(destType)
-	if !isStructMapping && !compositeAllowed {
-		return nil, fmt.Errorf("unsupported top-level mapping (%s -> %s)", srcType.String(), destType.String())
-	}
-	hasError := sig.Results().Len() == 2
-
 	primaryName := params[primaryIdx].Name
 	var nodes []codeNode
-	if isStructMapping {
-		if len(params) == 1 { // single param -> delegate to helper
+	if mp.StructMapping {
+		if len(params) == 1 { // delegate
 			helperName := g.ensureStructHelper(srcType, destType)
 			callExpr := helperName + "(" + primaryName + ")"
 			nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: callExpr, WithError: hasError})
-		} else { // inline multi-param resolution
+		} else {
+			// inline resolution (copied from prior implementation)
 			paramStructs := map[string]*types.Struct{}
 			paramPtrs := map[string]bool{}
 			for i := 0; i < sig.Params().Len(); i++ {
@@ -105,7 +61,7 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 				parsed := parseTag(tag)
 				mapsrc := parsed["mapsrc"]
 				var srcParamName, srcFieldName string
-				if mapsrc != "" { // param.path override
+				if mapsrc != "" {
 					parts := strings.Split(mapsrc, ".")
 					paramToken := parts[0]
 					if strings.HasPrefix(paramToken, "p") {
@@ -172,7 +128,7 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 								currType = f.Type()
 							}
 							if okPath {
-								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, expr, df.Type(), currType, m.Name())
+								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, expr, df.Type(), currType, mp.Name)
 								nodes = append(nodes, assign...)
 								continue
 							}
@@ -214,7 +170,7 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 						for jj := 0; jj < ss.NumFields(); jj++ {
 							f2 := ss.Field(jj)
 							if f2.Exported() && f2.Name() == fname {
-								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(p.Name, paramPtrs[p.Name])+f2.Name(), df.Type(), f2.Type(), m.Name())
+								assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(p.Name, paramPtrs[p.Name])+f2.Name(), df.Type(), f2.Type(), mp.Name)
 								nodes = append(nodes, assign...)
 								resolved = true
 								break
@@ -224,7 +180,7 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 							break
 						}
 					}
-					if !resolved { // full type match attempt
+					if !resolved {
 						for idx, p := range params {
 							if idx == ctxIndex {
 								continue
@@ -242,7 +198,7 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 					}
 					continue
 				}
-				assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(srcParamName, paramPtrs[srcParamName])+sf.Name(), df.Type(), sf.Type(), m.Name())
+				assign := g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(srcParamName, paramPtrs[srcParamName])+sf.Name(), df.Type(), sf.Type(), mp.Name)
 				nodes = append(nodes, assign...)
 			}
 			if destPtr {
@@ -251,12 +207,24 @@ func (g *generator) buildMethodModel(implName string, m *types.Func) (*methodMod
 				nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: "dst", WithError: hasError})
 			}
 		}
-	} else if compositeAllowed { // top-level collection
+	} else if mp.CompositeMapping {
 		helperName := g.ensureCompositeHelper(srcType, destType)
 		callExpr := helperName + "(" + primaryName + ")"
 		nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: callExpr, WithError: hasError})
 	}
 	destTypeStr := types.TypeString(sig.Results().At(0).Type(), g.qualifier)
-	mm := &methodModel{Name: m.Name(), Params: params, PrimaryParam: primaryName, DestType: destTypeStr, HasError: hasError, Body: nodes, HasContext: g.currentCtxName != ""}
+	mm := &methodModel{Name: mp.Name, Params: params, PrimaryParam: primaryName, DestType: destTypeStr, HasError: hasError, Body: nodes, HasContext: ctxIndex >= 0}
 	return mm, nil
+}
+
+// populateMethods converts all methodPlans of an interface into concrete methodModels.
+func (g *generator) populateMethods(im *interfaceModel, plans []methodPlan) error {
+	for _, mp := range plans {
+		mm, err := g.buildMethodModelFromPlan(mp)
+		if err != nil {
+			return err
+		}
+		im.Methods = append(im.Methods, *mm)
+	}
+	return nil
 }

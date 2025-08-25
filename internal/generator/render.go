@@ -65,14 +65,39 @@ func (g *generator) run(cfg Config) error {
 	g.pkgScope = pkg.Types.Scope()
 
 	var interfaceModels []interfaceModel
+	allPlans := make([][]methodPlan, 0, len(cfg.Interfaces))
 	for _, name := range cfg.Interfaces {
-		model, err := g.buildInterfaceModel(name, ifaceMap[name])
+		model, plans, err := g.buildInterfaceModel(name, ifaceMap[name])
 		if err != nil {
 			return err
 		}
 		interfaceModels = append(interfaceModels, *model)
+		allPlans = append(allPlans, plans)
 	}
 
+	// Populate helpers discovered during method planning (single-param struct, composite)
+	g.populateHelpers()
+	// Build method bodies from plans (may add helper plans during assignment building)
+	for i := range interfaceModels {
+		if err := g.populateMethods(&interfaceModels[i], allPlans[i]); err != nil {
+			return err
+		}
+	}
+	// Populate any newly created helper plans
+	g.populateHelpers()
+	// De-duplicate helpers by name (defensive against accidental double population)
+	{
+		seen := map[string]bool{}
+		uniq := make([]helperModel, 0, len(g.helperModels))
+		for _, h := range g.helperModels {
+			if !seen[h.Name] {
+				seen[h.Name] = true
+				uniq = append(uniq, h)
+			}
+		}
+		g.helperModels = uniq
+	}
+	// Analyze helper error propagation now
 	g.computeHelperErrors()
 	g.annotateHelperErrorUsage(&interfaceModels)
 	needCtx := false

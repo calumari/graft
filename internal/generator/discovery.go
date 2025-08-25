@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
-	"sort"
-	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -31,28 +29,83 @@ func loadDir(dir string) ([]*packages.Package, error) {
 }
 
 // buildInterfaceModel constructs the model for a single interface type.
-func (g *generator) buildInterfaceModel(name string, iface *types.Interface) (*interfaceModel, error) {
+func (g *generator) buildInterfaceModel(name string, iface *types.Interface) (*interfaceModel, []methodPlan, error) {
 	implName := lowerFirst(name) + "Impl"
 	im := &interfaceModel{Name: name, ImplName: implName}
+	var plans []methodPlan
 	for i := 0; i < iface.NumMethods(); i++ {
 		m := iface.Method(i)
-		if sig, ok := m.Type().(*types.Signature); ok && sig.Params().Len() >= 1 && sig.Results().Len() >= 1 {
-			primaryIdx := 0
-			srcT := types.TypeString(sig.Params().At(primaryIdx).Type(), g.qualifier)
-			destT := types.TypeString(sig.Results().At(0).Type(), g.qualifier)
-			key := srcT + "->" + destT
-			// skip adding interface method if a custom func variant exists
-			if _, ok := g.registry[key]; !ok && g.findCustomVariant(key) == nil {
-				g.registry[key] = registryEntry{Name: m.Name(), HasError: sig.Results().Len() == 2, Kind: regKindInterfaceMethod}
+		sig, ok := m.Type().(*types.Signature)
+		if !ok {
+			return nil, nil, fmt.Errorf("method %s: not a signature", m.Name())
+		}
+		if sig.Params().Len() < 1 {
+			return nil, nil, fmt.Errorf("method %s: must have at least one parameter", m.Name())
+		}
+		if sig.Results().Len() < 1 || sig.Results().Len() > 2 {
+			return nil, nil, fmt.Errorf("method %s: must have 1 or 2 results", m.Name())
+		}
+		if sig.Results().Len() == 2 && !isErrorType(sig.Results().At(1).Type()) {
+			return nil, nil, fmt.Errorf("method %s: second result must be error", m.Name())
+		}
+		// register interface method (for nested helper references) unless custom func variant present
+		srcT := types.TypeString(sig.Params().At(0).Type(), g.qualifier)
+		destT := types.TypeString(sig.Results().At(0).Type(), g.qualifier)
+		key := srcT + "->" + destT
+		if _, ok := g.registry[key]; !ok && g.findCustomVariant(key) == nil {
+			g.registry[key] = registryEntry{Name: m.Name(), HasError: sig.Results().Len() == 2, Kind: regKindInterfaceMethod}
+		}
+		// Build param models (names only) for plan
+		var params []paramModel
+		ctxIdx := -1
+		primaryIdx := -1
+		for pi := 0; pi < sig.Params().Len(); pi++ {
+			p := sig.Params().At(pi)
+			pname := p.Name()
+			if pname == "" {
+				pname = fmt.Sprintf("p%d", pi)
+			}
+			if nt, ok := p.Type().(*types.Named); ok {
+				if obj := nt.Obj(); obj != nil && obj.Name() == "Context" {
+					if pkg := obj.Pkg(); pkg != nil && pkg.Path() == "context" {
+						ctxIdx = pi
+					}
+				}
+			}
+			params = append(params, paramModel{Name: pname, Type: types.TypeString(p.Type(), g.qualifier)})
+			if pi == ctxIdx {
+				continue
+			}
+			if primaryIdx == -1 {
+				if s, _ := underlyingStruct(p.Type()); s != nil || isCollectionLike(p.Type()) {
+					primaryIdx = pi
+				}
 			}
 		}
-		mm, err := g.buildMethodModel(implName, m)
-		if err != nil {
-			return nil, fmt.Errorf("method %s: %w", m.Name(), err)
+		if primaryIdx == -1 {
+			return nil, nil, fmt.Errorf("method %s: no struct or collection parameter to map from", m.Name())
 		}
-		im.Methods = append(im.Methods, *mm)
+		srcType := sig.Params().At(primaryIdx).Type()
+		destType := sig.Results().At(0).Type()
+		srcStruct, _ := underlyingStruct(srcType)
+		destStruct, dptr := underlyingStruct(destType)
+		structMap := srcStruct != nil && destStruct != nil
+		composite := isCollectionLike(srcType) && isCollectionLike(destType)
+		if !structMap && !composite {
+			return nil, nil, fmt.Errorf("method %s: unsupported top-level mapping (%s -> %s)", m.Name(), srcType.String(), destType.String())
+		}
+		// For simple single-param struct/composite mapping, pre-plan helper shell
+		if structMap && len(params) == 1 {
+			g.ensureStructHelper(srcType, destType)
+		}
+		if composite {
+			g.ensureCompositeHelper(srcType, destType)
+		}
+		mp := methodPlan{Name: m.Name(), Signature: sig, Params: params, PrimaryIndex: primaryIdx, CtxIndex: ctxIdx, HasError: sig.Results().Len() == 2, StructMapping: structMap, CompositeMapping: composite, ImplName: implName}
+		_ = dptr // currently unused at plan level
+		plans = append(plans, mp)
 	}
-	return im, nil
+	return im, plans, nil
 }
 
 // discoverCustomFuncs finds eligible custom mapping functions.
@@ -96,29 +149,4 @@ func (g *generator) discoverCustomFuncs(pkg *packages.Package, allowlist []strin
 }
 
 // Orchestrates initial discovery and interface model construction.
-func (g *generator) discoverAndBuild(cfg Config, pkg *packages.Package, ifaceMap map[string]*types.Interface) ([]interfaceModel, error) {
-	// keep stable ordering
-	sort.Strings(cfg.Interfaces)
-	// discover custom funcs
-	funcMap := g.discoverCustomFuncs(pkg, cfg.CustomFuncs)
-	for k, mi := range funcMap {
-		g.registry[k] = mi
-		if !mi.HasError { // ensure base variant accessible without #err suffix
-			base := strings.TrimSuffix(k, "#err")
-			if _, ok := g.registry[base]; !ok {
-				g.registry[base] = registryEntry{Name: mi.Name, HasError: false, Kind: regKindCustomFunc}
-			}
-		}
-	}
-	g.pkgScope = pkg.Types.Scope()
-
-	var interfaceModels []interfaceModel
-	for _, name := range cfg.Interfaces {
-		model, err := g.buildInterfaceModel(name, ifaceMap[name])
-		if err != nil {
-			return nil, err
-		}
-		interfaceModels = append(interfaceModels, *model)
-	}
-	return interfaceModels, nil
-}
+// (legacy discoverAndBuild removed; discovery integrated in run pipeline)

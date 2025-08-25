@@ -15,6 +15,7 @@ type generator struct {
 	helperSet      map[string]bool
 	helperModels   []helperModel
 	helperErrors   map[string]bool // helper name -> returns error
+	helperPlans    []helperPlan    // planning data for two-pass population
 	pkgScope       *types.Scope
 	currentCtxName string // set while building a method if ctx parameter present
 }
@@ -26,7 +27,36 @@ func newGenerator() *generator {
 		registry:     make(map[string]registryEntry),
 		helperSet:    make(map[string]bool),
 		helperErrors: make(map[string]bool),
+		helperPlans:  nil,
 	}
+}
+
+// helperPlan stores planning metadata prior to IR helperModel population.
+type helperPlan struct {
+	Name               string
+	SrcGoType          types.Type
+	DestGoType         types.Type
+	SrcIsPtr           bool
+	DestIsPtr          bool
+	UnderDestType      string
+	ZeroReturn         string
+	CustomFuncName     string
+	CustomFuncHasError bool
+	Populated          bool
+	Composite          bool // true for top-level collection/map helpers
+}
+
+// methodPlan stores method signature and high-level mapping classification prior to node construction.
+type methodPlan struct {
+	Name             string
+	Signature        *types.Signature
+	Params           []paramModel // ordered (excluding synthesized names?)
+	PrimaryIndex     int
+	CtxIndex         int
+	HasError         bool
+	StructMapping    bool
+	CompositeMapping bool
+	ImplName         string
 }
 
 func (g *generator) qualifier(p *types.Package) string {

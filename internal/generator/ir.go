@@ -1,5 +1,7 @@
 package generator
 
+// (no external deps needed here)
+
 // This file houses the intermediate representation (IR) structures and enums
 // used across generator phases (discovery -> modeling -> analysis -> render).
 
