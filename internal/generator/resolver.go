@@ -295,7 +295,7 @@ func (r *fieldResolver) methodStructPlans(mp *methodPlan, sig *types.Signature, 
 				for jj := 0; jj < ss.NumFields(); jj++ {
 					f2 := ss.Field(jj)
 					if f2.Exported() && f2.Name() == fname {
-						nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(p.Name, paramPtrs[p.Name])+f2.Name(), df.Type(), f2.Type(), mp.name, useCtx)
+						nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, fmt.Sprintf("%s.%s", p.Name, f2.Name()), df.Type(), f2.Type(), mp.name, useCtx)
 						plans = append(plans, AssignmentPlan{DestField: fname, Nodes: nodes})
 						resolved = true
 						break
@@ -324,7 +324,7 @@ func (r *fieldResolver) methodStructPlans(mp *methodPlan, sig *types.Signature, 
 			continue
 		}
 
-		nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(srcParamName, paramPtrs[srcParamName])+sf.Name(), df.Type(), sf.Type(), mp.name, useCtx)
+		nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, fmt.Sprintf("%s.%s", srcParamName, sf.Name()), df.Type(), sf.Type(), mp.name, useCtx)
 		plans = append(plans, AssignmentPlan{DestField: fname, Nodes: nodes})
 	}
 

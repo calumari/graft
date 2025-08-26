@@ -9,6 +9,8 @@
     {{template "node_ifNilReturn" .}}
 {{- else if eq .Kind "destInit" -}}
     {{template "node_destInit" .}}
+{{- else if eq .Kind "destInitAlloc" -}}
+    {{template "node_destInitAlloc" .}}
 {{- else if eq .Kind "assignDirect" -}}
     {{template "node_assignDirect" .}}
 {{- else if eq .Kind "assignCast" -}}

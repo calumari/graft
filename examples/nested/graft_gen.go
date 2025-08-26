@@ -7,7 +7,6 @@ package nested
 
 // map_Address_to_AddressDTO maps a value of type Address to AddressDTO.
 func map_Address_to_AddressDTO(in Address) AddressDTO {
-	// Destination zero value; fields populated by node sequence below.
 	var dst AddressDTO
 	dst.Street = in.Street
 	dst.City = in.City
@@ -16,7 +15,6 @@ func map_Address_to_AddressDTO(in Address) AddressDTO {
 
 // map_User_to_UserDTO maps a value of type User to UserDTO.
 func map_User_to_UserDTO(in User) UserDTO {
-	// Destination zero value; fields populated by node sequence below.
 	var dst UserDTO
 	dst.ID = in.ID
 	dst.Name = in.Name

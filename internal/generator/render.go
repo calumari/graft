@@ -103,9 +103,8 @@ func (g *generator) run(cfg Config) error {
 		}
 		g.helperModels = uniq
 	}
-	// Analyze helper error propagation now
-	helperErrMap := g.computeHelperErrors()
-	g.annotateHelperErrorUsage(&interfaceModels, helperErrMap)
+	// Analyze helper error propagation (consolidated)
+	g.analyzeHelperErrors(&interfaceModels)
 
 	needCtx := false
 	for _, im := range interfaceModels {

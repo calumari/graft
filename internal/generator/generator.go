@@ -135,13 +135,6 @@ func prefixDest(destPtr bool) string {
 	return "dst."
 }
 
-func prefixSrc(param string, isPtr bool) string {
-	if isPtr {
-		return "*" + param + "."
-	}
-	return param + "."
-}
-
 // helperName derives a deterministic (readable) name. Format:
 // map_<Src>_to_<Dest>_<N> where Src/Dest are simplified type tokens.
 func (g *generator) helperName(srcType, destType types.Type, composite bool) string {

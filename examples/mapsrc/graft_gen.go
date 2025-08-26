@@ -7,7 +7,6 @@ package mapsrc
 
 // map_Input_to_Output maps a value of type Input to Output.
 func map_Input_to_Output(in Input) Output {
-	// Destination zero value; fields populated by node sequence below.
 	var dst Output
 	dst.UserName = in.P.Name
 	dst.Code = in.P.Detail.Code

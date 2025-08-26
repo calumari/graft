@@ -79,7 +79,19 @@ func (g *generator) buildAssignmentNodes(destExpr, srcExpr string, destType, src
 
 	if isStructLike(destType) && isStructLike(srcType) {
 		helper := g.ensureStructHelper(srcType, destType)
-		return []codeNode{{Kind: nodeKindAssignHelper, Dest: destExpr, Src: srcExpr, Helper: helper, UseContext: useCtx}}
+		withErr := false
+		// Inspect helperPlans for this helper to see if its custom func has error (quick heuristic).
+		keySrc := types.TypeString(srcType, g.qualifier)
+		keyDst := types.TypeString(destType, g.qualifier)
+		for _, hp := range g.helperPlans {
+			if types.TypeString(hp.srcType, g.qualifier) == keySrc && types.TypeString(hp.destType, g.qualifier) == keyDst {
+				if hp.customFuncName != "" && hp.customFuncHasError {
+					withErr = true
+				}
+				break
+			}
+		}
+		return []codeNode{{Kind: nodeKindAssignHelper, Dest: destExpr, Src: srcExpr, Helper: helper, UseContext: useCtx, WithError: withErr}}
 	}
 
 	return []codeNode{{Kind: nodeKindUnsupported, SrcType: srcType.String(), DestType: destType.String()}}
@@ -153,37 +165,49 @@ func (g *generator) populateHelpers(scope *types.Scope) {
 			continue
 		}
 		if plan.composite {
-			body := g.buildAssignmentNodes("dst", "in", plan.destType, plan.srcType, "", false)
-			hm := helperModel{
-				Name:          plan.name,
-				SrcType:       types.TypeString(plan.srcType, g.qualifier),
-				DestType:      types.TypeString(plan.destType, g.qualifier),
-				Body:          body,
-				HasError:      false,
-				HasContext:    false,
-				SrcIsPtr:      false,
-				DestIsPtr:     false,
-				UnderDestType: "",
-				ZeroReturn:    "",
+			assignBody := g.buildAssignmentNodes("dst", "in", plan.destType, plan.srcType, "", false)
+			hasErr := false
+			for i := range assignBody {
+				if assignBody[i].WithError || assignBody[i].LoopWithError {
+					hasErr = true
+					break
+				}
 			}
+			body := []codeNode{}
+			if plan.srcIsPtr {
+				body = append(body, codeNode{Kind: nodeKindIfNilReturn, Var: "in", Zero: g.zeroValue(plan.destType), WithError: hasErr})
+			}
+			body = append(body, codeNode{Kind: nodeKindDestInit, Var: "dst", DestType: types.TypeString(plan.destType, g.qualifier)})
+			body = append(body, assignBody...)
+			body = append(body, codeNode{Kind: nodeKindReturn, Expr: "dst", WithError: hasErr})
+			hm := helperModel{Name: plan.name, SrcType: types.TypeString(plan.srcType, g.qualifier), DestType: types.TypeString(plan.destType, g.qualifier), Body: body, HasError: hasErr, HasContext: false}
 			g.helperModels = append(g.helperModels, hm)
 			plan.populated = true
 			continue
 		}
 		if plan.customFuncName != "" {
-			hm := helperModel{
-				Name:          plan.name,
-				SrcType:       types.TypeString(plan.srcType, g.qualifier),
-				DestType:      types.TypeString(plan.destType, g.qualifier),
-				SrcIsPtr:      plan.srcIsPtr,
-				DestIsPtr:     plan.destIsPtr,
-				UnderDestType: plan.underDestType,
-				ZeroReturn:    plan.zeroReturn,
-				Body:          []codeNode{{Kind: nodeKindAssignFunc, Dest: "dst", Method: plan.customFuncName, Arg: "in", WithError: plan.customFuncHasError}},
-				HasError:      plan.customFuncHasError,
-				HasContext:    false,
+			body := []codeNode{}
+			if plan.srcIsPtr {
+				body = append(body, codeNode{Kind: nodeKindIfNilReturn, Var: "in", Zero: plan.zeroReturn, WithError: plan.customFuncHasError})
 			}
-			g.helperModels = append(g.helperModels, hm)
+			if plan.destIsPtr {
+				body = append(body, codeNode{Kind: nodeKindDestInitAlloc, Var: "dst", UnderType: plan.underDestType})
+			} else {
+				body = append(body, codeNode{Kind: nodeKindDestInit, Var: "dst", DestType: types.TypeString(plan.destType, g.qualifier)})
+			}
+			body = append(body,
+				codeNode{Kind: nodeKindAssignFunc, Dest: "dst", Method: plan.customFuncName, Arg: "in", WithError: plan.customFuncHasError},
+				codeNode{Kind: nodeKindReturn, Expr: "dst", WithError: plan.customFuncHasError},
+			)
+			mh := helperModel{
+				Name:       plan.name,
+				SrcType:    types.TypeString(plan.srcType, g.qualifier),
+				DestType:   types.TypeString(plan.destType, g.qualifier),
+				Body:       body,
+				HasError:   plan.customFuncHasError,
+				HasContext: false,
+			}
+			g.helperModels = append(g.helperModels, mh)
 			plan.populated = true
 			continue
 		}
@@ -193,6 +217,14 @@ func (g *generator) populateHelpers(scope *types.Scope) {
 			continue
 		}
 		var body []codeNode
+		if plan.srcIsPtr {
+			body = append(body, codeNode{Kind: nodeKindIfNilReturn, Var: "in", Zero: plan.zeroReturn, WithError: false})
+		}
+		if plan.destIsPtr {
+			body = append(body, codeNode{Kind: nodeKindDestInitAlloc, Var: "dst", UnderType: plan.underDestType})
+		} else {
+			body = append(body, codeNode{Kind: nodeKindDestInit, Var: "dst", DestType: types.TypeString(plan.destType, g.qualifier)})
+		}
 		for _, ap := range plans {
 			body = append(body, ap.Nodes...)
 		}
@@ -203,17 +235,14 @@ func (g *generator) populateHelpers(scope *types.Scope) {
 				break
 			}
 		}
+		body = append(body, codeNode{Kind: nodeKindReturn, Expr: "dst", WithError: hasErr})
 		hm := helperModel{
-			Name:          plan.name,
-			SrcType:       types.TypeString(plan.srcType, g.qualifier),
-			DestType:      types.TypeString(plan.destType, g.qualifier),
-			SrcIsPtr:      plan.srcIsPtr,
-			DestIsPtr:     plan.destIsPtr,
-			UnderDestType: plan.underDestType,
-			ZeroReturn:    plan.zeroReturn,
-			Body:          body,
-			HasError:      hasErr,
-			HasContext:    false,
+			Name:       plan.name,
+			SrcType:    types.TypeString(plan.srcType, g.qualifier),
+			DestType:   types.TypeString(plan.destType, g.qualifier),
+			Body:       body,
+			HasError:   hasErr,
+			HasContext: false,
 		}
 		g.helperModels = append(g.helperModels, hm)
 		plan.populated = true

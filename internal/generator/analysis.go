@@ -2,22 +2,23 @@ package generator
 
 import "strings"
 
-// computeHelperErrors performs a fixed-point analysis over helper bodies to mark which helpers ultimately return an error.
-func (g *generator) computeHelperErrors() map[string]bool {
-	changed := true
-
+// analyzeHelperErrors consolidates: fixed-point helper error marking, node annotation,
+// and success return node adjustment.
+func (g *generator) analyzeHelperErrors(interfaces *[]interfaceModel) {
 	index := map[string]*helperModel{}
 	for i := range g.helperModels {
 		index[g.helperModels[i].Name] = &g.helperModels[i]
 	}
 
-	var matchesErrNode func(*codeNode) bool
-	matchesErrNode = func(n *codeNode) bool {
-		if n.Kind == nodeKindAssignMethod || n.Kind == nodeKindPtrMethodMap {
-			return n.WithError
-		}
-		if n.Kind == nodeKindAssignHelper || n.Kind == nodeKindPtrStructMap {
-			if index[n.Helper] != nil && index[n.Helper].HasError {
+	var nodeProducesError func(*codeNode) bool
+	nodeProducesError = func(n *codeNode) bool {
+		switch n.Kind {
+		case nodeKindAssignMethod, nodeKindPtrMethodMap:
+			if n.WithError {
+				return true
+			}
+		case nodeKindAssignHelper, nodeKindPtrStructMap:
+			if h := index[n.Helper]; h != nil && h.HasError {
 				return true
 			}
 		}
@@ -25,81 +26,81 @@ func (g *generator) computeHelperErrors() map[string]bool {
 			return true
 		}
 		for i := range n.Children {
-			if matchesErrNode(&n.Children[i]) {
+			if nodeProducesError(&n.Children[i]) {
 				return true
 			}
 		}
 		return false
 	}
 
-	marksHelper := func(h *helperModel) bool {
-		for i := range h.Body {
-			if matchesErrNode(&h.Body[i]) {
-				return true
-			}
-		}
-		return false
-	}
-
+	changed := true
 	for changed {
 		changed = false
 		for i := range g.helperModels {
 			h := &g.helperModels[i]
-			if !h.HasError && marksHelper(h) {
+			if h.HasError {
+				continue
+			}
+			produced := false
+			for ni := range h.Body {
+				if nodeProducesError(&h.Body[ni]) {
+					produced = true
+					break
+				}
+			}
+			if produced {
 				h.HasError = true
 				changed = true
 			}
 		}
 	}
 
-	res := map[string]bool{}
+	helperErr := map[string]bool{}
 	for i := range g.helperModels {
 		if g.helperModels[i].HasError {
-			res[g.helperModels[i].Name] = true
+			helperErr[g.helperModels[i].Name] = true
 		}
 	}
 
-	return res
-}
-
-// annotateHelperErrorUsage propagates helper error knowledge into node.WithError flags where needed.
-func (g *generator) annotateHelperErrorUsage(interfaces *[]interfaceModel, helperErr map[string]bool) {
-	for hi := range g.helperModels {
-		h := &g.helperModels[hi]
-		for ni := range h.Body {
-			g.annotateNode(&h.Body[ni], helperErr)
-		}
-	}
-
-	for ii := range *interfaces {
-		im := &(*interfaces)[ii]
-		for mi := range im.Methods {
-			m := &im.Methods[mi]
-			for ni := range m.Body {
-				g.annotateNode(&m.Body[ni], helperErr)
+	var annotate func(*codeNode)
+	annotate = func(n *codeNode) {
+		switch n.Kind {
+		case nodeKindAssignHelper, nodeKindPtrStructMap:
+			if helperErr[n.Helper] {
+				n.WithError = true
 			}
-		}
-	}
-}
-
-func (g *generator) annotateNode(n *codeNode, helperErr map[string]bool) {
-	switch n.Kind {
-	case nodeKindAssignHelper, nodeKindPtrStructMap:
-		if helperErr[n.Helper] {
-			n.WithError = true
-		}
-	case nodeKindReturn:
-		if n.Expr != "" && helperErr != nil {
+		case nodeKindReturn:
 			if idx := strings.Index(n.Expr, "("); idx > 0 {
-				name := n.Expr[:idx]
-				if helperErr[name] {
+				if helperErr[n.Expr[:idx]] {
 					n.WithError = false
 				}
 			}
 		}
+		for i := range n.Children {
+			annotate(&n.Children[i])
+		}
+	}
+	for hi := range g.helperModels {
+		for ni := range g.helperModels[hi].Body {
+			annotate(&g.helperModels[hi].Body[ni])
+		}
+	}
+	for ii := range *interfaces {
+		im := &(*interfaces)[ii]
+		for mi := range im.Methods {
+			for ni := range im.Methods[mi].Body {
+				annotate(&im.Methods[mi].Body[ni])
+			}
+		}
 	}
 
-	for i := range n.Children {
-		g.annotateNode(&n.Children[i], helperErr)
+	for hi := range g.helperModels {
+		if g.helperModels[hi].HasError {
+			for ni := range g.helperModels[hi].Body {
+				if g.helperModels[hi].Body[ni].Kind == nodeKindReturn {
+					g.helperModels[hi].Body[ni].WithError = true
+				}
+			}
+		}
 	}
 }

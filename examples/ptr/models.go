@@ -17,4 +17,5 @@ type UserMapper interface {
 	ToDTOFromPtr(*User) UserDTO
 	ToDTOPtr(*User) *UserDTO
 	ToDTOPtrFromVal(User) *UserDTO
+	ToDTOFromMultipleUsers(*User, *User) *UserDTO // toy example of multiple source params (only one is mapped)
 }

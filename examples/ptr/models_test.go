@@ -54,4 +54,14 @@ func TestPtr(t *testing.T) {
 		require.Equal(t, 1, out.ID)
 		require.Equal(t, "Alice", out.Name)
 	})
+
+	t.Run("multiple user pointer params map to user dto pointer", func(t *testing.T) {
+		m := NewUserMapper()
+		in1 := &User{ID: 1, Name: "Alice"}
+		in2 := &User{ID: 2, Name: "Bob"}
+		out := m.ToDTOFromMultipleUsers(in1, in2)
+		require.NotNil(t, out)
+		require.Equal(t, 1, out.ID)
+		require.Equal(t, "Alice", out.Name)
+	})
 }

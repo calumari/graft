@@ -7,7 +7,6 @@ package ptr
 
 // map_User_to_UserDTO maps a value of type User to UserDTO.
 func map_User_to_UserDTO(in User) UserDTO {
-	// Destination zero value; fields populated by node sequence below.
 	var dst UserDTO
 	dst.ID = in.ID
 	dst.Name = in.Name
@@ -19,7 +18,6 @@ func map_Ptr_User_to_UserDTO(in *User) UserDTO {
 	if in == nil {
 		return UserDTO{}
 	}
-	// Destination zero value; fields populated by node sequence below.
 	var dst UserDTO
 	dst.ID = in.ID
 	dst.Name = in.Name
@@ -31,7 +29,6 @@ func map_Ptr_User_to_Ptr_UserDTO(in *User) *UserDTO {
 	if in == nil {
 		return nil
 	}
-	// Allocate destination pointer
 	dst := new(UserDTO)
 	dst.ID = in.ID
 	dst.Name = in.Name
@@ -40,7 +37,6 @@ func map_Ptr_User_to_Ptr_UserDTO(in *User) *UserDTO {
 
 // map_User_to_Ptr_UserDTO maps a value of type User to *UserDTO.
 func map_User_to_Ptr_UserDTO(in User) *UserDTO {
-	// Allocate destination pointer
 	dst := new(UserDTO)
 	dst.ID = in.ID
 	dst.Name = in.Name
@@ -56,6 +52,20 @@ func NewUserMapper() UserMapper { return &userMapperImpl{} }
 // ToDTO maps p0 to the destination type.
 func (m *userMapperImpl) ToDTO(p0 User) UserDTO {
 	return map_User_to_UserDTO(p0)
+}
+
+// ToDTOFromMultipleUsers maps p0 to the destination type.
+func (m *userMapperImpl) ToDTOFromMultipleUsers(p0 *User, p1 *User) *UserDTO {
+	if p0 == nil {
+		return nil
+	}
+	if p1 == nil {
+		return nil
+	}
+	mapped := new(UserDTO)
+	mapped.ID = p0.ID
+	mapped.Name = p0.Name
+	return mapped
 }
 
 // ToDTOFromPtr maps p0 to the destination type.

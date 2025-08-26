@@ -5,22 +5,23 @@ package generator
 
 // node kinds for template-driven code emission
 const (
-	nodeKindComment      = "comment"
-	nodeKindIfNilReturn  = "ifNilReturn"
-	nodeKindDestInit     = "destInit"
-	nodeKindAssignDirect = "assignDirect"
-	nodeKindAssignCast   = "assignCast"
-	nodeKindAssignHelper = "assignHelper"
-	nodeKindAssignMethod = "assignMethod"
-	nodeKindAssignFunc   = "assignFunc"
-	nodeKindSliceMap     = "sliceMap"
-	nodeKindArrayMap     = "arrayMap"
-	nodeKindMapMap       = "mapMap"
-	nodeKindPtrStructMap = "ptrStructMap"
-	nodeKindPtrMethodMap = "ptrMethodMap"
-	nodeKindPtrFuncMap   = "ptrFuncMap"
-	nodeKindReturn       = "return"
-	nodeKindUnsupported  = "unsupported"
+	nodeKindComment       = "comment"
+	nodeKindIfNilReturn   = "ifNilReturn"
+	nodeKindDestInit      = "destInit"
+	nodeKindDestInitAlloc = "destInitAlloc"
+	nodeKindAssignDirect  = "assignDirect"
+	nodeKindAssignCast    = "assignCast"
+	nodeKindAssignHelper  = "assignHelper"
+	nodeKindAssignMethod  = "assignMethod"
+	nodeKindAssignFunc    = "assignFunc"
+	nodeKindSliceMap      = "sliceMap"
+	nodeKindArrayMap      = "arrayMap"
+	nodeKindMapMap        = "mapMap"
+	nodeKindPtrStructMap  = "ptrStructMap"
+	nodeKindPtrMethodMap  = "ptrMethodMap"
+	nodeKindPtrFuncMap    = "ptrFuncMap"
+	nodeKindReturn        = "return"
+	nodeKindUnsupported   = "unsupported"
 )
 
 // Config holds generation settings for the mapper generator.
@@ -73,16 +74,12 @@ type paramModel struct {
 // helperModel represents an internal helper function we synthesize for struct
 // or collection mapping.
 type helperModel struct {
-	Name          string
-	SrcType       string
-	DestType      string
-	Body          []codeNode
-	HasError      bool
-	HasContext    bool
-	SrcIsPtr      bool
-	DestIsPtr     bool
-	UnderDestType string // underlying struct type when DestIsPtr
-	ZeroReturn    string // zero literal used for early return on nil src when SrcIsPtr
+	Name       string
+	SrcType    string
+	DestType   string
+	Body       []codeNode
+	HasError   bool
+	HasContext bool
 }
 
 // codeNode is an ir node used by templates to emit code fragments.
@@ -96,9 +93,9 @@ type codeNode struct {
 	Arg           string
 	Comment       string
 	Var           string
+	UnderType     string // for pointer dest init alloc
 	Zero          string
 	WithError     bool
-	Code          string
 	DestType      string
 	ElemType      string
 	SrcType       string

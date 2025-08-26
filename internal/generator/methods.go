@@ -67,9 +67,14 @@ func (g *generator) buildStructMethodNodes(mp *methodPlan, sig *types.Signature,
 	initVar := "dst"
 	if destPtr {
 		initVar = "mapped"
+		if pt, ok := destType.(*types.Pointer); ok {
+			under := types.TypeString(pt.Elem(), g.qualifier)
+			nodes = append(nodes, codeNode{Kind: nodeKindDestInitAlloc, Var: initVar, UnderType: under})
+		}
+	} else {
+		// Value destination: simple zero-value var decl.
+		nodes = append(nodes, codeNode{Kind: nodeKindDestInit, Var: initVar, DestType: types.TypeString(destType, g.qualifier)})
 	}
-
-	nodes = append(nodes, codeNode{Kind: nodeKindDestInit, Var: initVar, DestType: types.TypeString(destType, g.qualifier)})
 
 	plans, err := g.resolver.methodStructPlans(mp, sig, destStruct, destPtr, params, ctxIndex, primaryName, useCtx)
 	if err != nil {
@@ -79,11 +84,8 @@ func (g *generator) buildStructMethodNodes(mp *methodPlan, sig *types.Signature,
 		nodes = append(nodes, ap.Nodes...)
 	}
 
-	retExpr := initVar
-	if destPtr {
-		retExpr = "&" + initVar
-	}
-	nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: retExpr, WithError: mp.hasError})
+	// Return pointer or value directly (pointer already allocated above).
+	nodes = append(nodes, codeNode{Kind: nodeKindReturn, Expr: initVar, WithError: mp.hasError})
 	return nodes, nil
 }
 

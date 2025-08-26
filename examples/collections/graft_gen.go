@@ -7,7 +7,6 @@ package collections
 
 // mapc_Slice_Elem_to_Slice_ElemDTO maps a value of type []Elem to []ElemDTO.
 func mapc_Slice_Elem_to_Slice_ElemDTO(in []Elem) ([]ElemDTO, error) {
-	// Destination zero value; fields populated by node sequence below.
 	var dst []ElemDTO
 	if in != nil {
 		dst = make([]ElemDTO, len(in))
@@ -29,7 +28,6 @@ func mapc_Slice_Elem_to_Slice_ElemDTO(in []Elem) ([]ElemDTO, error) {
 
 // mapc_Map_string_To_Elem_to_Map_string_To_ElemDTO maps a value of type map[string]Elem to map[string]ElemDTO.
 func mapc_Map_string_To_Elem_to_Map_string_To_ElemDTO(in map[string]Elem) (map[string]ElemDTO, error) {
-	// Destination zero value; fields populated by node sequence below.
 	var dst map[string]ElemDTO
 	if in != nil {
 		dst = make(map[string]ElemDTO, len(in))
@@ -51,7 +49,6 @@ func mapc_Map_string_To_Elem_to_Map_string_To_ElemDTO(in map[string]Elem) (map[s
 
 // map_MapContainer_to_MapContainerDTO maps a value of type MapContainer to MapContainerDTO.
 func map_MapContainer_to_MapContainerDTO(in MapContainer) (MapContainerDTO, error) {
-	// Destination zero value; fields populated by node sequence below.
 	var dst MapContainerDTO
 	if in.Items != nil {
 		dst.Items = make(map[string]ElemDTO, len(in.Items))
@@ -73,7 +70,6 @@ func map_MapContainer_to_MapContainerDTO(in MapContainer) (MapContainerDTO, erro
 
 // map_SliceContainer_to_SliceContainerDTO maps a value of type SliceContainer to SliceContainerDTO.
 func map_SliceContainer_to_SliceContainerDTO(in SliceContainer) (SliceContainerDTO, error) {
-	// Destination zero value; fields populated by node sequence below.
 	var dst SliceContainerDTO
 	if in.Items != nil {
 		dst.Items = make([]ElemDTO, len(in.Items))
@@ -95,7 +91,6 @@ func map_SliceContainer_to_SliceContainerDTO(in SliceContainer) (SliceContainerD
 
 // map_Elem_to_ElemDTO maps a value of type Elem to ElemDTO.
 func map_Elem_to_ElemDTO(in Elem) (ElemDTO, error) {
-	// Destination zero value; fields populated by node sequence below.
 	var dst ElemDTO
 	tmp, err := ElemToElemDTO(in)
 	if err != nil {

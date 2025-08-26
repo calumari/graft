@@ -7,7 +7,6 @@ package error_propagation
 
 // map_Input_to_Output maps a value of type Input to Output.
 func map_Input_to_Output(in Input) (Output, error) {
-	// Destination zero value; fields populated by node sequence below.
 	var dst Output
 	if in.Items != nil {
 		dst.Items = make([]ItemDTO, len(in.Items))

@@ -7,7 +7,6 @@ package custom_function
 
 // map_A_to_B maps a value of type A to B.
 func map_A_to_B(in A) B {
-	// Destination zero value; fields populated by node sequence below.
 	var dst B
 	dst = AToB(in)
 
@@ -19,7 +18,6 @@ func map_Ptr_A_to_Ptr_B(in *A) (*B, error) {
 	if in == nil {
 		return nil, nil
 	}
-	// Allocate destination pointer
 	dst := new(B)
 	tmp, err := AToBErr(in)
 	if err != nil {

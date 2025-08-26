@@ -7,7 +7,6 @@ package basic
 
 // map_User_to_UserDTO maps a value of type User to UserDTO.
 func map_User_to_UserDTO(in User) UserDTO {
-	// Destination zero value; fields populated by node sequence below.
 	var dst UserDTO
 	dst.ID = in.ID
 	dst.Name = in.Name
