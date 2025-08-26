@@ -15,6 +15,7 @@ type ItemDTO struct {
 type Input struct {
 	Items []Item
 }
+
 type Output struct {
 	Items []ItemDTO `mapfn:"ItemToDTO"`
 }
@@ -24,7 +25,7 @@ func ItemToDTO(i Item) (ItemDTO, error) {
 	if i.V < 0 {
 		return ItemDTO{}, fmt.Errorf("negative: %d", i.V)
 	}
-	return ItemDTO{V: i.V}, nil
+	return ItemDTO(i), nil
 }
 
 type Mapper interface {

@@ -14,9 +14,13 @@ import (
 
 // run orchestrates discovery, modeling, analysis, and file emission.
 func (g *generator) run(cfg Config) error {
+	if err := ensureTemplates(); err != nil { // lazy template init
+		return err
+	}
 	if len(cfg.Interfaces) == 0 {
 		return errors.New("no interfaces provided")
 	}
+
 	absDir, err := filepath.Abs(cfg.Dir)
 	if err != nil {
 		return err
@@ -49,6 +53,7 @@ func (g *generator) run(cfg Config) error {
 	if len(missing) > 0 {
 		return fmt.Errorf("interfaces not found: %s", strings.Join(missing, ", "))
 	}
+
 	sort.Strings(cfg.Interfaces)
 	g.helperNames = make(map[string]string)
 	g.helperModels = nil
@@ -62,8 +67,10 @@ func (g *generator) run(cfg Config) error {
 			}
 		}
 	}
+
 	var interfaceModels []interfaceModel
-	allPlans := make([][]methodPlan, 0, len(cfg.Interfaces))
+	allPlans := make([][]*methodPlan, 0, len(cfg.Interfaces))
+
 	for _, name := range cfg.Interfaces {
 		model, plans, err := g.buildInterfaceModel(name, ifaceMap[name])
 		if err != nil {
@@ -83,6 +90,7 @@ func (g *generator) run(cfg Config) error {
 	}
 	// Populate any newly created helper plans
 	g.populateHelpers(pkg.Types.Scope())
+
 	// De-duplicate helpers by name (defensive against accidental double population)
 	{
 		seen := map[string]bool{}
@@ -98,6 +106,7 @@ func (g *generator) run(cfg Config) error {
 	// Analyze helper error propagation now
 	helperErrMap := g.computeHelperErrors()
 	g.annotateHelperErrorUsage(&interfaceModels, helperErrMap)
+
 	needCtx := false
 	for _, im := range interfaceModels {
 		for _, mm := range im.Methods {
@@ -112,6 +121,7 @@ func (g *generator) run(cfg Config) error {
 			g.helperModels[i].HasContext = true
 		}
 	}
+
 	if cfg.Debug {
 		var assignPaths func(prefix string, nodes []codeNode)
 		assignPaths = func(prefix string, nodes []codeNode) {
@@ -133,18 +143,31 @@ func (g *generator) run(cfg Config) error {
 			}
 		}
 	}
-	data := fileModel{Package: pkg.Name, Source: strings.Join(cfg.Interfaces, ", "), Helpers: g.helperModels, Interfaces: interfaceModels, NeedContext: needCtx, Debug: cfg.Debug, Command: cfg.Command, Version: cfg.Version}
+
+	data := fileModel{
+		Package:     pkg.Name,
+		Source:      strings.Join(cfg.Interfaces, ", "),
+		Helpers:     g.helperModels,
+		Interfaces:  interfaceModels,
+		NeedContext: needCtx,
+		Debug:       cfg.Debug,
+		Command:     cfg.Command,
+		Version:     cfg.Version,
+	}
+
 	var out bytes.Buffer
 	if err := fileTmpl.ExecuteTemplate(&out, tmplFile, data); err != nil {
 		return err
 	}
+
 	formatted, err := format.Source(out.Bytes())
 	if err != nil {
 		formatted = out.Bytes()
 	}
 	outPath := filepath.Join(absDir, cfg.Output)
-	if err := os.WriteFile(outPath, formatted, 0o644); err != nil {
+	if err := os.WriteFile(outPath, formatted, 0o644); err != nil { //nolint:mnd,gosec // restrictive perms
 		return err
 	}
+
 	return nil
 }

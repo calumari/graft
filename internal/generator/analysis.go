@@ -5,13 +5,14 @@ import "strings"
 // computeHelperErrors performs a fixed-point analysis over helper bodies to mark which helpers ultimately return an error.
 func (g *generator) computeHelperErrors() map[string]bool {
 	changed := true
+
 	index := map[string]*helperModel{}
 	for i := range g.helperModels {
 		index[g.helperModels[i].Name] = &g.helperModels[i]
 	}
 
-	var matchesErrNode func(codeNode) bool
-	matchesErrNode = func(n codeNode) bool {
+	var matchesErrNode func(*codeNode) bool
+	matchesErrNode = func(n *codeNode) bool {
 		if n.Kind == nodeKindAssignMethod || n.Kind == nodeKindPtrMethodMap {
 			return n.WithError
 		}
@@ -23,16 +24,17 @@ func (g *generator) computeHelperErrors() map[string]bool {
 		if n.WithError {
 			return true
 		}
-		for _, c := range n.Children {
-			if matchesErrNode(c) {
+		for i := range n.Children {
+			if matchesErrNode(&n.Children[i]) {
 				return true
 			}
 		}
 		return false
 	}
+
 	marksHelper := func(h *helperModel) bool {
-		for _, n := range h.Body {
-			if matchesErrNode(n) {
+		for i := range h.Body {
+			if matchesErrNode(&h.Body[i]) {
 				return true
 			}
 		}
@@ -49,12 +51,14 @@ func (g *generator) computeHelperErrors() map[string]bool {
 			}
 		}
 	}
+
 	res := map[string]bool{}
-	for _, h := range g.helperModels {
-		if h.HasError {
-			res[h.Name] = true
+	for i := range g.helperModels {
+		if g.helperModels[i].HasError {
+			res[g.helperModels[i].Name] = true
 		}
 	}
+
 	return res
 }
 
@@ -66,6 +70,7 @@ func (g *generator) annotateHelperErrorUsage(interfaces *[]interfaceModel, helpe
 			g.annotateNode(&h.Body[ni], helperErr)
 		}
 	}
+
 	for ii := range *interfaces {
 		im := &(*interfaces)[ii]
 		for mi := range im.Methods {
@@ -93,6 +98,7 @@ func (g *generator) annotateNode(n *codeNode, helperErr map[string]bool) {
 			}
 		}
 	}
+
 	for i := range n.Children {
 		g.annotateNode(&n.Children[i], helperErr)
 	}

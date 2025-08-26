@@ -14,7 +14,7 @@ type B struct {
 
 // // Custom function (no error)
 func AToB(a A) B {
-	return B{N: a.N}
+	return B(a)
 }
 
 // Custom function (with error)

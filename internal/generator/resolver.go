@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/types"
 	"strings"
+	"unicode/utf8"
 )
 
 // AssignmentPlan represents the planned mapping for a single destination field.
@@ -18,9 +19,9 @@ type fieldResolver struct{ g *generator }
 
 // helperStructPlans builds assignment plans for a helper mapping (single src
 // struct to dest struct).
-func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) []AssignmentPlan {
-	sStruct, _ := underlyingStruct(plan.SrcGoType)
-	dStruct, _ := underlyingStruct(plan.DestGoType)
+func (r *fieldResolver) helperStructPlans(plan helperPlan, scope *types.Scope) []AssignmentPlan {
+	sStruct, _ := underlyingStruct(plan.srcType)
+	dStruct, _ := underlyingStruct(plan.destType)
 
 	if sStruct == nil || dStruct == nil {
 		return nil
@@ -58,7 +59,9 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 					if sf == nil {
 						rRunes := []rune(sourceName)
 						if len(rRunes) > 0 {
-							rRunes[0] = []rune(strings.ToUpper(string(rRunes[0])))[0]
+							first, _ := utf8.DecodeRuneInString(string(rRunes[0]))
+							upper := strings.ToUpper(string(first))
+							rRunes[0], _ = utf8.DecodeRuneInString(upper)
 							sf = findMatchingSourceField(sStruct, string(rRunes))
 						}
 					}
@@ -68,7 +71,7 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 
 		if explicitSrcPath != "" && explicitFunc == "" {
 			parts := strings.Split(explicitSrcPath, ".")
-			currType := plan.SrcGoType
+			currType := plan.srcType
 			expr := "in"
 			okPath := true
 			for _, seg := range parts {
@@ -104,7 +107,7 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 			continue
 		}
 
-		if explicitFunc != "" { // resolve mapfn now (scope available in populateHelpers)
+		if explicitFunc != "" {
 			resolved := false
 			if scope != nil {
 				if obj := scope.Lookup(explicitFunc); obj != nil {
@@ -112,16 +115,16 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 						if sig, ok := fn.Type().(*types.Signature); ok && sig.Params().Len() == 1 && sig.Results().Len() >= 1 {
 							if sig.Results().Len() == 1 || (sig.Results().Len() == 2 && isErrorType(sig.Results().At(1).Type())) {
 								withErr := sig.Results().Len() == 2
-								dt := df.Type()
-								if dslice, okd := dt.(*types.Slice); okd {
+								switch dd := df.Type().(type) {
+								case *types.Slice:
 									child := []codeNode{{Kind: nodeKindAssignFunc, Dest: "mapped", Method: explicitFunc, Arg: "v", WithError: withErr}}
-									plans = append(plans, AssignmentPlan{DestField: fname, Nodes: []codeNode{{Kind: nodeKindSliceMap, Src: "in." + sf.Name(), Dest: "dst." + fname, DestType: types.TypeString(dslice, r.g.qualifier), ElemType: types.TypeString(dslice.Elem(), r.g.qualifier), Children: child, LoopWithError: withErr}}})
+									plans = append(plans, AssignmentPlan{DestField: fname, Nodes: []codeNode{{Kind: nodeKindSliceMap, Src: "in." + sf.Name(), Dest: "dst." + fname, DestType: types.TypeString(dd, r.g.qualifier), ElemType: types.TypeString(dd.Elem(), r.g.qualifier), Children: child, LoopWithError: withErr}}})
 									resolved = true
-								} else if dmap, okd := dt.(*types.Map); okd {
+								case *types.Map:
 									child := []codeNode{{Kind: nodeKindAssignFunc, Dest: "mapped", Method: explicitFunc, Arg: "v", WithError: withErr}}
-									plans = append(plans, AssignmentPlan{DestField: fname, Nodes: []codeNode{{Kind: nodeKindMapMap, Src: "in." + sf.Name(), Dest: "dst." + fname, DestType: types.TypeString(dmap, r.g.qualifier), ElemType: types.TypeString(dmap.Elem(), r.g.qualifier), Children: child, LoopWithError: withErr}}})
+									plans = append(plans, AssignmentPlan{DestField: fname, Nodes: []codeNode{{Kind: nodeKindMapMap, Src: "in." + sf.Name(), Dest: "dst." + fname, DestType: types.TypeString(dd, r.g.qualifier), ElemType: types.TypeString(dd.Elem(), r.g.qualifier), Children: child, LoopWithError: withErr}}})
 									resolved = true
-								} else {
+								default:
 									srcExpr := "in." + sf.Name()
 									nodes := []codeNode{{Kind: nodeKindAssignFunc, Dest: "dst." + fname, Method: explicitFunc, Arg: srcExpr, WithError: withErr}}
 									plans = append(plans, AssignmentPlan{DestField: fname, Nodes: nodes})
@@ -151,8 +154,9 @@ func (r *fieldResolver) helperStructPlans(plan *helperPlan, scope *types.Scope) 
 // methodStructPlans resolves field assignments for a multi-param struct mapping
 // method. It encapsulates the prior inline logic for mapsrc handling and
 // fallback heuristics.
-func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, destStruct *types.Struct, destPtr bool, params []paramModel, ctxIndex int, primaryName string, useCtx bool) ([]AssignmentPlan, error) {
+func (r *fieldResolver) methodStructPlans(mp *methodPlan, sig *types.Signature, destStruct *types.Struct, destPtr bool, params []paramModel, ctxIndex int, primaryName string, useCtx bool) ([]AssignmentPlan, error) {
 	var plans []AssignmentPlan
+
 	// build param struct lookup
 	paramStructs := map[string]*types.Struct{}
 	paramPtrs := map[string]bool{}
@@ -166,6 +170,7 @@ func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, d
 			paramPtrs[pname] = isPtr
 		}
 	}
+
 	for i := 0; i < destStruct.NumFields(); i++ {
 		df := destStruct.Field(i)
 		if !df.Exported() {
@@ -176,6 +181,7 @@ func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, d
 		parsed := parseTag(tag)
 		mapsrc := parsed["mapsrc"]
 		var srcParamName, srcFieldName string
+
 		if mapsrc != "" {
 			parts := strings.Split(mapsrc, ".")
 			paramToken := parts[0]
@@ -243,7 +249,7 @@ func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, d
 						currType = f.Type()
 					}
 					if okPath {
-						nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, expr, df.Type(), currType, mp.Name, useCtx)
+						nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, expr, df.Type(), currType, mp.name, useCtx)
 						plans = append(plans, AssignmentPlan{DestField: fname, Nodes: nodes})
 						continue
 					}
@@ -253,17 +259,20 @@ func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, d
 				srcFieldName = pathParts[0]
 			}
 		}
+
 		if srcParamName == "" {
 			srcParamName = primaryName
 		}
 		if srcFieldName == "" {
 			srcFieldName = fname
 		}
+
 		sStruct := paramStructs[srcParamName]
 		if sStruct == nil {
 			plans = append(plans, AssignmentPlan{DestField: fname, Nodes: []codeNode{{Kind: nodeKindComment, Comment: "no struct param for " + fname}}})
 			continue
 		}
+
 		var sf *types.Var
 		for j := 0; j < sStruct.NumFields(); j++ {
 			f := sStruct.Field(j)
@@ -274,7 +283,7 @@ func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, d
 		}
 		if sf == nil {
 			resolved := false
-			// attempt other params
+			// attempt other params.
 			for _, p := range params {
 				if p.Name == srcParamName {
 					continue
@@ -286,7 +295,7 @@ func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, d
 				for jj := 0; jj < ss.NumFields(); jj++ {
 					f2 := ss.Field(jj)
 					if f2.Exported() && f2.Name() == fname {
-						nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(p.Name, paramPtrs[p.Name])+f2.Name(), df.Type(), f2.Type(), mp.Name, useCtx)
+						nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(p.Name, paramPtrs[p.Name])+f2.Name(), df.Type(), f2.Type(), mp.name, useCtx)
 						plans = append(plans, AssignmentPlan{DestField: fname, Nodes: nodes})
 						resolved = true
 						break
@@ -314,8 +323,10 @@ func (r *fieldResolver) methodStructPlans(mp methodPlan, sig *types.Signature, d
 			}
 			continue
 		}
-		nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(srcParamName, paramPtrs[srcParamName])+sf.Name(), df.Type(), sf.Type(), mp.Name, useCtx)
+
+		nodes := r.g.buildAssignmentNodes(prefixDest(destPtr)+fname, prefixSrc(srcParamName, paramPtrs[srcParamName])+sf.Name(), df.Type(), sf.Type(), mp.name, useCtx)
 		plans = append(plans, AssignmentPlan{DestField: fname, Nodes: nodes})
 	}
+
 	return plans, nil
 }

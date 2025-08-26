@@ -5,12 +5,14 @@ import (
 	"go/types"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // generator holds transient state while building models.
 type generator struct {
 	currentPkgName string
-	// registry maps src->dest (and src->dest#err) to metadata for interface methods or custom funcs.
+	// registry maps src->dest (and src->dest#err) to metadata for interface
+	// methods or custom funcs.
 	registry     map[string]registryEntry
 	helperNames  map[string]string // key -> helper function name
 	helperModels []helperModel
@@ -18,43 +20,47 @@ type generator struct {
 	resolver     *fieldResolver
 }
 
-func Run(cfg Config) error { return newGenerator().run(cfg) }
+// helperPlan stores planning metadata prior to IR helperModel population.
+type helperPlan struct {
+	name               string
+	srcType            types.Type
+	destType           types.Type
+	srcIsPtr           bool
+	destIsPtr          bool
+	underDestType      string
+	zeroReturn         string
+	customFuncName     string
+	customFuncHasError bool
+	populated          bool
+	composite          bool // true for top-level collection/map helpers
+}
+
+// methodPlan stores method signature and high-level mapping classification
+// prior to node construction.
+type methodPlan struct {
+	name             string
+	signature        *types.Signature
+	params           []paramModel // ordered (excluding synthesized names?)
+	primaryIndex     int
+	ctxIndex         int
+	hasError         bool
+	structMapping    bool
+	compositeMapping bool
+	implName         string
+}
+
+// Run executes the generation with the provided configuration.
+// Accepts a pointer to avoid copying a large struct (lint hugeParam).
+func Run(cfg *Config) error { return newGenerator().run(*cfg) }
 
 func newGenerator() *generator {
 	g := &generator{
 		registry:    make(map[string]registryEntry),
 		helperNames: make(map[string]string),
 	}
+
 	g.resolver = &fieldResolver{g: g}
 	return g
-}
-
-// helperPlan stores planning metadata prior to IR helperModel population.
-type helperPlan struct {
-	Name               string
-	SrcGoType          types.Type
-	DestGoType         types.Type
-	SrcIsPtr           bool
-	DestIsPtr          bool
-	UnderDestType      string
-	ZeroReturn         string
-	CustomFuncName     string
-	CustomFuncHasError bool
-	Populated          bool
-	Composite          bool // true for top-level collection/map helpers
-}
-
-// methodPlan stores method signature and high-level mapping classification prior to node construction.
-type methodPlan struct {
-	Name             string
-	Signature        *types.Signature
-	Params           []paramModel // ordered (excluding synthesized names?)
-	PrimaryIndex     int
-	CtxIndex         int
-	HasError         bool
-	StructMapping    bool
-	CompositeMapping bool
-	ImplName         string
 }
 
 func (g *generator) qualifier(p *types.Package) string {
@@ -68,9 +74,15 @@ func lowerFirst(s string) string {
 	if s == "" {
 		return s
 	}
-	r := []rune(s)
-	r[0] = []rune(strings.ToLower(string(r[0])))[0]
-	return string(r)
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError || size == 0 {
+		return s
+	}
+	lower := strings.ToLower(string(r))
+	if lower == "" {
+		return s
+	}
+	return lower + s[size:]
 }
 
 func isErrorType(t types.Type) bool {
@@ -246,7 +258,8 @@ func customFuncKey(src, dest string, hasErr bool) string {
 	return src + "->" + dest
 }
 
-// findCustomVariant returns a custom func variant (non-error or error) if present for the base key.
+// findCustomVariant returns a custom func variant (non-error or error) if
+// present for the base key.
 func (g *generator) findCustomVariant(base string) *registryEntry {
 	if e, ok := g.registry[base]; ok && e.Kind == regKindCustomFunc {
 		return &e

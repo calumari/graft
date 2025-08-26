@@ -17,6 +17,7 @@ func deriveVersion() string {
 		if bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 			return bi.Main.Version
 		}
+
 		var revision string
 		for _, s := range bi.Settings {
 			if s.Key == "vcs.revision" && s.Value != "" {
@@ -24,13 +25,14 @@ func deriveVersion() string {
 				break
 			}
 		}
-		if len(revision) >= 12 { // short hash for readability
+		if len(revision) >= 12 { //nolint:mnd // short hash for readability
 			return revision[:12]
 		}
 		if revision != "" {
 			return revision
 		}
 	}
+
 	return "devel"
 }
 
@@ -38,13 +40,15 @@ func main() {
 	var interfacesCSV string
 	var output string
 	var dir string
-	var debug bool
+	var debugFlag bool
 	var customFuncsCSV string
+
 	flag.StringVar(&interfacesCSV, "interface", "", "Comma-separated list of mapper interface names to implement (required)")
 	flag.StringVar(&output, "output", "graft_gen.go", "Output filename for generated code")
 	flag.StringVar(&dir, "dir", ".", "Directory to scan for interface definitions (relative to current directory)")
-	flag.BoolVar(&debug, "debug", false, "Emit debug comments linking generated code to template nodes")
+	flag.BoolVar(&debugFlag, "debug", false, "Emit debug comments linking generated code to template nodes")
 	flag.StringVar(&customFuncsCSV, "custom_funcs", "", "Comma-separated list of custom mapping function names")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [flags]\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nGraftgen generates type-safe struct mappers from interface definitions.\n\n")
@@ -60,10 +64,12 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
 	interfaces := strings.Split(interfacesCSV, ",")
 	for i := range interfaces {
 		interfaces[i] = strings.TrimSpace(interfaces[i])
 	}
+
 	var customFuncs []string
 	if customFuncsCSV != "" {
 		parts := strings.SplitSeq(customFuncsCSV, ",")
@@ -80,7 +86,7 @@ func main() {
 	if dir != "." {
 		cmdParts = append(cmdParts, "-dir="+dir)
 	}
-	if debug {
+	if debugFlag {
 		cmdParts = append(cmdParts, "-debug")
 	}
 	if len(customFuncs) > 0 {
@@ -88,7 +94,17 @@ func main() {
 	}
 	displayCmd := strings.Join(cmdParts, " ")
 	buildVersion := deriveVersion()
-	cfg := generator.Config{Dir: dir, Interfaces: interfaces, Output: output, Debug: debug, CustomFuncs: customFuncs, Command: displayCmd, Version: buildVersion}
+
+	cfg := &generator.Config{
+		Dir:         dir,
+		Interfaces:  interfaces,
+		Output:      output,
+		Debug:       debugFlag,
+		CustomFuncs: customFuncs,
+		Command:     displayCmd,
+		Version:     buildVersion,
+	}
+
 	if err := generator.Run(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "graft: %v\n", err)
 		os.Exit(1)

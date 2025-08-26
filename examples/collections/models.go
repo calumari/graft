@@ -17,19 +17,22 @@ func ElemToElemDTO(e Elem) (ElemDTO, error) {
 	if e.V < 0 {
 		return ElemDTO{}, fmt.Errorf("bad")
 	}
-	return ElemDTO{V: e.V}, nil
+	return ElemDTO(e), nil
 }
 
 // Containers to demonstrate mapfn-driven element mapping with error short-circuit
 type SliceContainer struct {
 	Items []Elem
 }
+
 type SliceContainerDTO struct {
 	Items []ElemDTO `mapfn:"ElemToElemDTO"`
 }
+
 type MapContainer struct {
 	Items map[string]Elem
 }
+
 type MapContainerDTO struct {
 	Items map[string]ElemDTO `mapfn:"ElemToElemDTO"`
 }
